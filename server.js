@@ -7,12 +7,16 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
+// ========== FIX: Trust proxy (Railway/Cloudflare) ==========
+app.set('trust proxy', true);
+// ===========================================================
+
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI, { maxPoolSize: 10 })
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
-// Models
+// ========== MODELS ==========
 const TrialVerificationSchema = new mongoose.Schema({
   userId: { type: String, required: true },
   token: { type: String, required: true, unique: true },
@@ -40,7 +44,7 @@ const SubscriptionSchema = new mongoose.Schema({
 });
 const Subscription = mongoose.model('Subscription', SubscriptionSchema);
 
-// Helper to send Discord webhook
+// ========== WEBHOOK LOG ==========
 async function sendTrialLog(userId, expiresAt) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   if (!webhookUrl) {
@@ -56,7 +60,7 @@ async function sendTrialLog(userId, expiresAt) {
   }
 }
 
-// Endpoints
+// ========== ENDPOINTS ==========
 app.get('/health', (req, res) => res.send('OK'));
 
 app.get('/verify-trial', async (req, res) => {
@@ -69,10 +73,11 @@ app.get('/verify-trial', async (req, res) => {
   }
 
   const userId = verification.userId;
-  // Get real IP from x-forwarded-for (Railway/Cloudflare)
-  const forwarded = req.headers['x-forwarded-for'];
-  const ip = forwarded ? forwarded.split(',').shift().trim() : req.socket.remoteAddress;
-  const cleanIp = ip.replace(/^::ffff:/, '').trim();
+
+  // ========== GET REAL IP (trust proxy enabled) ==========
+  const cleanIp = req.ip.replace(/^::ffff:/, '');
+  console.log(`[Verify] IP detected: ${cleanIp}`); // debug log
+  // =====================================================
 
   // Check if IP was used by another user
   const existing = await UsedIP.findOne({
