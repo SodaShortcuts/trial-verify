@@ -6,7 +6,24 @@ require('dotenv').config();
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// ========== TRUST PROXY ==========
 app.set('trust proxy', true);
+
+// ========== HELPER: GET REAL IP ==========
+function getClientIP(req) {
+  // 1. Check x-forwarded-for (most reliable)
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    // Take the first IP in the list (client's real IP)
+    const ips = forwarded.split(',').map(ip => ip.trim());
+    return ips[0].replace(/^::ffff:/, '');
+  }
+  // 2. Fallback to req.ip (if trust proxy is working)
+  return req.ip.replace(/^::ffff:/, '');
+}
+// =========================================
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI, { maxPoolSize: 10 })
@@ -43,7 +60,7 @@ const SubscriptionSchema = new mongoose.Schema({
 });
 const Subscription = mongoose.model('Subscription', SubscriptionSchema);
 
-// Helper to send Discord webhook (plain text)
+// Webhook log
 async function sendTrialLog(userId, expiresAt, ip, userAgent) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   if (!webhookUrl) {
@@ -59,7 +76,7 @@ async function sendTrialLog(userId, expiresAt, ip, userAgent) {
   }
 }
 
-// ================== CONFIRMATION PAGE ==================
+// ========== CONFIRMATION PAGE (GET) ==========
 app.get('/verify-trial', async (req, res) => {
   const { token } = req.query;
   if (!token) return res.status(400).send('Missing token.');
@@ -69,7 +86,7 @@ app.get('/verify-trial', async (req, res) => {
     return res.status(400).send('Invalid or expired token. Please run /trial again.');
   }
 
-  // Show confirmation button
+  // Show the confirmation button (preview bots won't click)
   res.send(`
     <html>
       <head>
@@ -91,7 +108,7 @@ app.get('/verify-trial', async (req, res) => {
           <h1>🔐 Confirm Trial Activation</h1>
           <p>Click the button below to activate your 48‑hour free trial.</p>
           <div class="info">
-            <span><strong>Your IP will be recorded:</strong> ${req.ip.replace(/^::ffff:/, '')}</span>
+            <span><strong>Your IP will be recorded:</strong> ${getClientIP(req)}</span>
           </div>
           <form action="/confirm-trial" method="POST">
             <input type="hidden" name="token" value="${token}">
@@ -104,8 +121,8 @@ app.get('/verify-trial', async (req, res) => {
   `);
 });
 
-// ================== CONFIRMATION POST ==================
-app.post('/confirm-trial', express.urlencoded({ extended: true }), async (req, res) => {
+// ========== CONFIRMATION POST ==========
+app.post('/confirm-trial', async (req, res) => {
   const { token } = req.body;
   if (!token) return res.status(400).send('Missing token.');
 
@@ -115,15 +132,15 @@ app.post('/confirm-trial', express.urlencoded({ extended: true }), async (req, r
   }
 
   const userId = verification.userId;
-  const cleanIp = req.ip.replace(/^::ffff:/, '');
+  const clientIP = getClientIP(req);
   const userAgent = req.headers['user-agent'] || 'unknown';
   const referer = req.headers['referer'] || '';
 
-  console.log(`[Verify] IP: ${cleanIp}, UA: ${userAgent}`);
+  console.log(`[Verify] Real IP: ${clientIP}, UA: ${userAgent}`);
 
   // Check if IP was used by another user
   const existing = await UsedIP.findOne({
-    ip: cleanIp,
+    ip: clientIP,
     userId: { $ne: userId },
     createdAt: { $gt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
   });
@@ -143,12 +160,12 @@ app.post('/confirm-trial', express.urlencoded({ extended: true }), async (req, r
   });
 
   // Store IP with UA
-  await UsedIP.create({ userId, ip: cleanIp, userAgent, referer });
+  await UsedIP.create({ userId, ip: clientIP, userAgent, referer });
   verification.verified = true;
   await verification.save();
 
   // Send Discord log
-  await sendTrialLog(userId, expiresAt, cleanIp, userAgent);
+  await sendTrialLog(userId, expiresAt, clientIP, userAgent);
 
   // Success page
   res.send(`
@@ -173,11 +190,10 @@ app.post('/confirm-trial', express.urlencoded({ extended: true }), async (req, r
           <div class="info">
             <span><strong>Expires:</strong> ${new Date(expiresAt).toLocaleString()}</span>
             <span><strong>Max Configs:</strong> 3</span>
-            <span><strong>IP Logged:</strong> ${cleanIp}</span>
-            <span><strong>User Agent:</strong> ${userAgent}</span>
+            <span><strong>IP Logged:</strong> ${clientIP}</span>
           </div>
           <p>Go back to Discord and use <code>/start</code> to begin automation.</p>
-          <div class="footer">🔒 Your IP and device info have been recorded to prevent abuse.</div>
+          <div class="footer">🔒 Your IP has been recorded to prevent abuse.</div>
         </div>
       </body>
     </html>
