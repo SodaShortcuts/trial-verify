@@ -10,10 +10,11 @@ const app = express();
 
 // ========== CONFIGURATION ==========
 const GUILD_ID = '1292786100707786763';
-const CHANNEL_ID_MAIN = '1497016420893200535';
-const CHANNEL_ID_TRIAL = '1294237394765090847';
+const CHANNEL_ID_MAIN = '1497016420893200535';   // for "Open Discord" buttons
+const CHANNEL_ID_TRIAL = '1294237394765090847';  // for "Run /trial again"
 
 const DISCORD_APP_MAIN = `discord://discord.com/channels/${GUILD_ID}/${CHANNEL_ID_MAIN}`;
+const DISCORD_WEB_MAIN = `https://discord.com/channels/${GUILD_ID}/${CHANNEL_ID_MAIN}`;
 const DISCORD_APP_TRIAL = `discord://discord.com/channels/${GUILD_ID}/${CHANNEL_ID_TRIAL}`;
 
 // ========== SECURITY MIDDLEWARE ==========
@@ -27,7 +28,7 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
-    res.status(429).send(errorPage('Rate Limit Exceeded', 'Too many requests. Please wait a few minutes.', 'Slow down, you\'re making too many requests.', { icon: '⏳', color: '#ed4245', type: 'discord_error' }));
+    res.status(429).send(errorPage('Rate Limit Exceeded', 'Too many requests. Please wait a few minutes.', 'Slow down, you\'re making too many requests.', { icon: '⏳', color: '#ed4245', type: 'trial' }));
   }
 });
 app.use(limiter);
@@ -39,7 +40,7 @@ const strictLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
-    res.status(429).send(errorPage('Rate Limit Exceeded', 'Too many trial attempts. Please wait an hour before trying again.', 'This helps prevent abuse of the trial system.', { icon: '⏳', color: '#ed4245', type: 'discord_error' }));
+    res.status(429).send(errorPage('Rate Limit Exceeded', 'Too many trial attempts. Please wait an hour before trying again.', 'This helps prevent abuse of the trial system.', { icon: '⏳', color: '#ed4245', type: 'trial' }));
   }
 });
 app.use('/confirm-trial', strictLimiter);
@@ -71,20 +72,25 @@ function pageTemplate(title, body, options = {}) {
         .card {
           background: rgba(255,255,255,0.04);
           backdrop-filter: blur(12px);
-          border: 1px solid rgba(255,255,255,0.06);
-          border-radius: 24px;
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 28px;
           padding: 48px 40px;
           max-width: 520px;
           width: 100%;
           box-shadow: 0 30px 60px rgba(0,0,0,0.6);
           text-align: center;
-          animation: fadeIn 0.6s ease forwards;
+          transition: opacity 0.4s ease, transform 0.4s ease;
+          animation: fadeSlide 0.6s ease forwards;
         }
-        @keyframes fadeIn {
+        .card.fade-out {
+          opacity: 0;
+          transform: scale(0.97) translateY(10px);
+        }
+        @keyframes fadeSlide {
           0% { opacity: 0; transform: scale(0.95) translateY(20px); }
           100% { opacity: 1; transform: scale(1) translateY(0); }
         }
-        .icon { font-size: 48px; margin-bottom: 16px; }
+        .icon { font-size: 52px; margin-bottom: 16px; }
         h1 { font-size: 28px; font-weight: 600; color: ${options.color || '#57f287'}; margin-bottom: 8px; }
         .subtitle { color: #b0b0b0; font-size: 16px; margin-bottom: 24px; }
         .message { color: #e0e0e0; font-size: 16px; line-height: 1.6; margin-bottom: 24px; }
@@ -100,9 +106,13 @@ function pageTemplate(title, body, options = {}) {
           border: none;
           cursor: pointer;
           text-align: center;
+          width: 100%;
+          max-width: 280px;
         }
         .btn:hover { background: #4752c4; transform: translateY(-2px); box-shadow: 0 8px 25px rgba(88,101,242,0.3); }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-web { background: #40444b; }
+        .btn-web:hover { background: #4f545c; }
         .footer-note { margin-top: 24px; color: #72767d; font-size: 13px; }
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0 28px; }
         .info-item { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 12px 16px; border: 1px solid rgba(255,255,255,0.06); }
@@ -112,6 +122,7 @@ function pageTemplate(title, body, options = {}) {
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .hidden { display: none; }
         .btn-group { display: flex; flex-direction: column; gap: 10px; align-items: center; margin: 16px 0; }
+        .btn-single { margin: 16px auto; }
         @media (max-width: 480px) { .card { padding: 32px 20px; } .info-grid { grid-template-columns: 1fr; } }
       </style>
     </head>
@@ -119,20 +130,42 @@ function pageTemplate(title, body, options = {}) {
       <div class="card" id="card">
         ${body}
       </div>
+      <script>
+        // Fade out card before navigation
+        document.querySelectorAll('.btn, button[type="submit"]').forEach(el => {
+          el.addEventListener('click', function(e) {
+            if (this.tagName === 'BUTTON' && this.type === 'submit') {
+              e.preventDefault();
+              const card = document.getElementById('card');
+              card.classList.add('fade-out');
+              setTimeout(() => {
+                this.closest('form').submit();
+              }, 400);
+            } else if (this.tagName === 'A') {
+              const card = document.getElementById('card');
+              card.classList.add('fade-out');
+            }
+          });
+        });
+      </script>
     </body>
     </html>
   `;
 }
 
 function errorPage(title, message, details = '', options = {}) {
-  const type = options.type || 'discord_error';
+  const type = options.type || 'trial'; // 'trial' or 'redo'
   let buttons = '';
-  if (type === 'token_error') {
+  if (type === 'redo') {
     const token = options.token || '';
     const redoLink = token ? `/verify-trial?token=${token}` : '/';
     buttons = `<a href="${redoLink}" class="btn">Redo Verification</a>`;
   } else {
-    buttons = `<a href="${DISCORD_APP_TRIAL}" class="btn">Run /trial again</a>`;
+    buttons = `
+      <div class="btn-single">
+        <a href="${DISCORD_APP_TRIAL}" class="btn">Run /trial again</a>
+      </div>
+    `;
   }
   return pageTemplate(title, `
     <div class="icon">${options.icon || '⚠️'}</div>
@@ -151,8 +184,9 @@ app.get('/', (req, res) => {
     <h1>Soda Trial Verification</h1>
     <p class="subtitle">Secure IP verification for free trials</p>
     <p class="message">This page is used to verify your identity before activating a 48‑hour free trial.</p>
-    <div style="margin: 16px 0;">
-      <a href="${DISCORD_APP_MAIN}" class="btn">Open Discord</a>
+    <div class="btn-group">
+      <a href="${DISCORD_APP_MAIN}" class="btn">Open Discord App</a>
+      <a href="${DISCORD_WEB_MAIN}" class="btn btn-web" target="_blank">Open Discord Web</a>
     </div>
     <div class="footer-note">© Soda's Services — All rights reserved</div>
   `, { color: '#57f287' }));
@@ -250,27 +284,40 @@ async function sendTrialLog(userId) {
 app.get('/verify-trial', async (req, res) => {
   const { token } = req.query;
   if (!token) {
-    return res.status(400).send(errorPage('Missing Token', 'No verification token was provided.', 'Please run /trial again to get a fresh link.', { icon: '❌', type: 'discord_error' }));
+    return res.status(400).send(errorPage('Missing Token', 'No verification token was provided.', 'Please run /trial again to get a fresh link.', { icon: '❌', type: 'trial' }));
   }
 
   console.log('[verify-trial] Looking up token...', token);
   try {
     const verification = await TrialVerification.findOne({ token }).maxTimeMS(5000);
     if (!verification) {
-      return res.status(400).send(errorPage('Invalid Verification Link', 'The link you used is invalid.', 'Please run /trial in Discord and follow the steps to get a new link.', { icon: '❌', type: 'discord_error' }));
+      return res.status(400).send(errorPage('Invalid Verification Link', 'The link you used is invalid.', 'Please run /trial in Discord and follow the steps to get a new link.', { icon: '❌', type: 'trial' }));
     }
     if (verification.verified) {
-      return res.status(400).send(errorPage('This Verification Link Was Already Used', 'Each link can only be used once.', 'Run /trial again in Discord to get a new link.', { icon: '🔁', type: 'discord_error' }));
+      // Already used – show a message and a button to run /trial again
+      return res.send(pageTemplate('Link Already Used', `
+        <div class="icon">🔁</div>
+        <h1 style="color:#ed4245">This Link Was Already Used</h1>
+        <p class="message">Each verification link can only be used once.</p>
+        <div class="btn-single">
+          <a href="${DISCORD_APP_TRIAL}" class="btn">Run /trial again</a>
+        </div>
+        <div class="footer-note">If you believe this is an error, contact support.</div>
+      `, { color: '#ed4245' }));
     }
     const createdAt = new Date(verification.createdAt);
     const now = new Date();
     const diffMinutes = (now - createdAt) / (1000 * 60);
+    // If expired (should not happen because TTL deletes, but just in case)
     if (diffMinutes > 10) {
-      return res.status(400).send(errorPage('Expired Verification Link', 'This link expired after 10 minutes.', 'Run /trial again in Discord to get a fresh link.', { icon: '⏳', type: 'discord_error' }));
+      return res.status(400).send(errorPage('Expired Verification Link', 'This link expired after 10 minutes.', 'Run /trial again in Discord to get a fresh link.', { icon: '⏳', type: 'trial' }));
     }
 
     const clientIP = getClientIP(req);
-    const totalSeconds = Math.max(0, Math.floor((10 - diffMinutes) * 60));
+    const totalSeconds = Math.max(0, (10 - diffMinutes) * 60);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = Math.floor(totalSeconds % 60);
+    const timeString = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 
     const html = pageTemplate('Confirm Trial', `
       <div class="icon">🔐</div>
@@ -285,58 +332,52 @@ app.get('/verify-trial', async (req, res) => {
         <button type="submit" class="btn" id="submitBtn" style="background:#5865f2;color:white;border:none;padding:14px 32px;border-radius:12px;font-size:18px;font-weight:500;cursor:pointer;width:100%;max-width:280px;">Activate Trial</button>
       </form>
       <div id="spinner" class="spinner"></div>
-      <div class="footer-note" id="footerNote">This link expires in <span id="countdown">${totalSeconds}</span> seconds.</div>
-      <div id="expiredMessage" style="display:none; color:#ed4245; margin-top:16px;">
-        ⏳ This link has expired. <a href="/" style="color:#5865f2;">Go start a new trial</a>
+      <div class="footer-note" id="footerNote">This link expires in <span id="countdown">${timeString}</span></div>
+      <div id="expiredMessage" style="display:none; margin-top:16px; color:#ed4245;">
+        ⏳ This link has expired. <a href="${DISCORD_APP_TRIAL}" style="color:#5865f2;">Run /trial again</a>
       </div>
       <script>
-        let secondsLeft = ${totalSeconds};
+        let secondsLeft = ${Math.floor(totalSeconds)};
         const countdownEl = document.getElementById('countdown');
         const submitBtn = document.getElementById('submitBtn');
-        const note = document.getElementById('footerNote');
+        const footerNote = document.getElementById('footerNote');
         const expiredMsg = document.getElementById('expiredMessage');
+        const form = document.getElementById('trialForm');
 
         function updateCountdown() {
           if (secondsLeft <= 0) {
-            countdownEl.textContent = '0';
+            countdownEl.textContent = '0s';
             submitBtn.disabled = true;
             submitBtn.style.opacity = '0.5';
             submitBtn.style.cursor = 'not-allowed';
-            note.style.display = 'none';
+            footerNote.style.display = 'none';
             expiredMsg.style.display = 'block';
+            clearInterval(interval);
             return;
           }
-          countdownEl.textContent = secondsLeft;
+          const mins = Math.floor(secondsLeft / 60);
+          const secs = Math.floor(secondsLeft % 60);
+          let display = '';
+          if (mins > 0) display = mins + 'm ';
+          display += secs + 's';
+          countdownEl.textContent = display;
           secondsLeft--;
         }
         updateCountdown();
-        setInterval(updateCountdown, 1000);
-
-        document.getElementById('trialForm').addEventListener('submit', function(e) {
-          const btn = document.getElementById('submitBtn');
-          const spinner = document.getElementById('spinner');
-          const note = document.getElementById('footerNote');
-          btn.disabled = true;
-          btn.textContent = 'Activating...';
-          spinner.style.display = 'block';
-          note.style.display = 'none';
-          // Remove any existing expired message
-          const expiredMsg = document.getElementById('expiredMessage');
-          if (expiredMsg) expiredMsg.style.display = 'none';
-        });
+        const interval = setInterval(updateCountdown, 1000);
       </script>
     `, { color: '#57f287' });
     res.send(html);
   } catch (err) {
     console.error('[verify-trial] DB error:', err);
-    return res.status(500).send(errorPage('Database Error', 'We encountered an issue while verifying your trial.', 'Please try again later or contact support.', { icon: '⚠️', type: 'discord_error' }));
+    return res.status(500).send(errorPage('Database Error', 'We encountered an issue while verifying your trial.', 'Please try again later or contact support.', { icon: '⚠️', type: 'trial' }));
   }
 });
 
 app.post('/confirm-trial', async (req, res) => {
   const { token } = req.body;
   if (!token) {
-    return res.status(400).send(errorPage('Missing Token', 'No verification token was provided.', 'Please run /trial again to get a fresh link.', { icon: '❌', type: 'discord_error' }));
+    return res.status(400).send(errorPage('Missing Token', 'No verification token was provided.', 'Please run /trial again to get a fresh link.', { icon: '❌', type: 'trial' }));
   }
 
   console.log('[confirm-trial] Received token:', token);
@@ -344,10 +385,18 @@ app.post('/confirm-trial', async (req, res) => {
   try {
     const verification = await TrialVerification.findOne({ token }).maxTimeMS(5000);
     if (!verification) {
-      return res.status(400).send(errorPage('Invalid Verification Link', 'The link you used is invalid.', 'Please run /trial in Discord and follow the steps to get a new link.', { icon: '❌', type: 'discord_error' }));
+      return res.status(400).send(errorPage('Invalid Verification Link', 'The link you used is invalid.', 'Please run /trial in Discord and follow the steps to get a new link.', { icon: '❌', type: 'trial' }));
     }
     if (verification.verified) {
-      return res.status(400).send(errorPage('This Verification Link Was Already Used', 'Each link can only be used once.', 'Run /trial again in Discord to get a new link.', { icon: '🔁', type: 'discord_error' }));
+      return res.send(pageTemplate('Link Already Used', `
+        <div class="icon">🔁</div>
+        <h1 style="color:#ed4245">This Link Was Already Used</h1>
+        <p class="message">Each verification link can only be used once.</p>
+        <div class="btn-single">
+          <a href="${DISCORD_APP_TRIAL}" class="btn">Run /trial again</a>
+        </div>
+        <div class="footer-note">If you believe this is an error, contact support.</div>
+      `, { color: '#ed4245' }));
     }
 
     const userId = verification.userId;
@@ -366,12 +415,12 @@ app.post('/confirm-trial', async (req, res) => {
       createdAt: { $gt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
     }).maxTimeMS(5000);
     if (existing) {
-      return res.status(403).send(errorPage('IP Already Used', 'This IP address has already been used for a trial.', 'If you believe this is an error, please contact support.', { icon: '🚫', type: 'token_error', token }));
+      return res.status(403).send(errorPage('IP Already Used', 'This IP address has already been used for a trial.', 'If you believe this is an error, please contact support.', { icon: '🚫', type: 'redo', token }));
     }
 
     const isVpn = await isVpnOrProxy(clientIP);
     if (isVpn) {
-      return res.status(403).send(errorPage('VPN/Proxy Detected', 'Please disable your VPN or proxy and try again.', 'For security, we do not allow trial activations through VPNs or proxies.', { icon: '🛡️', type: 'token_error', token }));
+      return res.status(403).send(errorPage('VPN/Proxy Detected', 'Please disable your VPN or proxy and try again.', 'For security, we do not allow trial activations through VPNs or proxies.', { icon: '🛡️', type: 'redo', token }));
     }
 
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
@@ -420,8 +469,9 @@ app.post('/confirm-trial', async (req, res) => {
           </div>
         </div>
         <p class="message">Go back to Discord and use <code style="background:#1e1e32;padding:2px 8px;border-radius:4px;color:#b0b0b0;">/start</code> to begin automation.</p>
-        <div style="margin: 16px 0;">
-          <a href="${DISCORD_APP_MAIN}" class="btn">Open Discord</a>
+        <div class="btn-group">
+          <a href="${DISCORD_APP_MAIN}" class="btn">Open Discord App</a>
+          <a href="${DISCORD_WEB_MAIN}" class="btn btn-web" target="_blank">Open Discord Web</a>
         </div>
         <div class="footer-note">🔒 Your IP has been recorded to prevent abuse.</div>
       </div>
@@ -446,14 +496,14 @@ app.post('/confirm-trial', async (req, res) => {
             document.getElementById('loadingSpinner').style.display = 'none';
             const content = document.getElementById('successContent');
             content.classList.remove('hidden');
-            content.style.animation = 'fadeIn 0.6s ease forwards';
-          }, 800);
+            content.style.animation = 'fadeSlide 0.6s ease forwards';
+          }, 600);
         })();
       </script>
     `, { color: '#57f287' }));
   } catch (err) {
     console.error('[confirm-trial] Error:', err);
-    return res.status(500).send(errorPage('Database Error', 'We encountered an issue while activating your trial.', 'Please try again later or contact support.', { icon: '⚠️', type: 'discord_error' }));
+    return res.status(500).send(errorPage('Database Error', 'We encountered an issue while activating your trial.', 'Please try again later or contact support.', { icon: '⚠️', type: 'trial' }));
   }
 });
 
