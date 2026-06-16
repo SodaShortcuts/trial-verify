@@ -10,13 +10,11 @@ const app = express();
 
 // ========== CONFIGURATION ==========
 const GUILD_ID = '1292786100707786763';
-const CHANNEL_ID_MAIN = '1497016420893200535';   // for "Open Discord" buttons
-const CHANNEL_ID_TRIAL = '1294237394765090847';  // for "Run /trial again" (error pages)
+const CHANNEL_ID_MAIN = '1497016420893200535';
+const CHANNEL_ID_TRIAL = '1294237394765090847';
 
 const DISCORD_APP_MAIN = `discord://discord.com/channels/${GUILD_ID}/${CHANNEL_ID_MAIN}`;
-const DISCORD_WEB_MAIN = `https://discord.com/channels/${GUILD_ID}/${CHANNEL_ID_MAIN}`;
 const DISCORD_APP_TRIAL = `discord://discord.com/channels/${GUILD_ID}/${CHANNEL_ID_TRIAL}`;
-const DISCORD_WEB_TRIAL = `https://discord.com/channels/${GUILD_ID}/${CHANNEL_ID_TRIAL}`;
 
 // ========== SECURITY MIDDLEWARE ==========
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -62,37 +60,31 @@ function pageTemplate(title, body, options = {}) {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
           font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-          background: linear-gradient(145deg, #0a0a2e 0%, #1a1a2e 100%);
+          background: linear-gradient(145deg, #0f0f1a 0%, #1a1a2e 100%);
           min-height: 100vh;
           display: flex;
           justify-content: center;
           align-items: center;
           padding: 20px;
           margin: 0;
-          transition: background 0.3s;
         }
         .card {
           background: rgba(255,255,255,0.04);
           backdrop-filter: blur(12px);
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 28px;
+          border: 1px solid rgba(255,255,255,0.06);
+          border-radius: 24px;
           padding: 48px 40px;
           max-width: 520px;
           width: 100%;
           box-shadow: 0 30px 60px rgba(0,0,0,0.6);
           text-align: center;
-          transition: opacity 0.4s ease, transform 0.4s ease;
-          animation: fadeSlide 0.6s ease forwards;
+          animation: fadeIn 0.6s ease forwards;
         }
-        .card.fade-out {
-          opacity: 0;
-          transform: scale(0.97) translateY(10px);
-        }
-        @keyframes fadeSlide {
+        @keyframes fadeIn {
           0% { opacity: 0; transform: scale(0.95) translateY(20px); }
           100% { opacity: 1; transform: scale(1) translateY(0); }
         }
-        .icon { font-size: 52px; margin-bottom: 16px; }
+        .icon { font-size: 48px; margin-bottom: 16px; }
         h1 { font-size: 28px; font-weight: 600; color: ${options.color || '#57f287'}; margin-bottom: 8px; }
         .subtitle { color: #b0b0b0; font-size: 16px; margin-bottom: 24px; }
         .message { color: #e0e0e0; font-size: 16px; line-height: 1.6; margin-bottom: 24px; }
@@ -108,13 +100,9 @@ function pageTemplate(title, body, options = {}) {
           border: none;
           cursor: pointer;
           text-align: center;
-          width: 100%;
-          max-width: 280px;
         }
         .btn:hover { background: #4752c4; transform: translateY(-2px); box-shadow: 0 8px 25px rgba(88,101,242,0.3); }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-        .btn-web { background: #40444b; }
-        .btn-web:hover { background: #4f545c; }
         .footer-note { margin-top: 24px; color: #72767d; font-size: 13px; }
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0 28px; }
         .info-item { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 12px 16px; border: 1px solid rgba(255,255,255,0.06); }
@@ -131,29 +119,12 @@ function pageTemplate(title, body, options = {}) {
       <div class="card" id="card">
         ${body}
       </div>
-      <script>
-        // Smooth transition when leaving page
-        document.querySelectorAll('.btn, button[type="submit"]').forEach(el => {
-          el.addEventListener('click', function(e) {
-            const card = document.getElementById('card');
-            card.classList.add('fade-out');
-            // Allow a short delay for the animation before the browser navigates
-            setTimeout(() => {}, 300);
-          });
-        });
-        // Remove fade-out class on page load to avoid flicker
-        window.addEventListener('load', function() {
-          const card = document.getElementById('card');
-          if (card) card.classList.remove('fade-out');
-        });
-      </script>
     </body>
     </html>
   `;
 }
 
 function errorPage(title, message, details = '', options = {}) {
-  // options.type: 'token_error' -> Redo Verification, 'discord_error' -> Run /trial again
   const type = options.type || 'discord_error';
   let buttons = '';
   if (type === 'token_error') {
@@ -161,12 +132,7 @@ function errorPage(title, message, details = '', options = {}) {
     const redoLink = token ? `/verify-trial?token=${token}` : '/';
     buttons = `<a href="${redoLink}" class="btn">Redo Verification</a>`;
   } else {
-    buttons = `
-      <div class="btn-group">
-        <a href="${DISCORD_APP_TRIAL}" class="btn">Run /trial again (App)</a>
-        <a href="${DISCORD_WEB_TRIAL}" class="btn btn-web" target="_blank">Run /trial again (Web)</a>
-      </div>
-    `;
+    buttons = `<a href="${DISCORD_APP_TRIAL}" class="btn">Run /trial again</a>`;
   }
   return pageTemplate(title, `
     <div class="icon">${options.icon || '⚠️'}</div>
@@ -185,9 +151,8 @@ app.get('/', (req, res) => {
     <h1>Soda Trial Verification</h1>
     <p class="subtitle">Secure IP verification for free trials</p>
     <p class="message">This page is used to verify your identity before activating a 48‑hour free trial.</p>
-    <div class="btn-group">
-      <a href="${DISCORD_APP_MAIN}" class="btn">Open Discord App</a>
-      <a href="${DISCORD_WEB_MAIN}" class="btn btn-web" target="_blank">Open Discord Web</a>
+    <div style="margin: 16px 0;">
+      <a href="${DISCORD_APP_MAIN}" class="btn">Open Discord</a>
     </div>
     <div class="footer-note">© Soda's Services — All rights reserved</div>
   `, { color: '#57f287' }));
@@ -305,6 +270,7 @@ app.get('/verify-trial', async (req, res) => {
     }
 
     const clientIP = getClientIP(req);
+    const totalSeconds = Math.max(0, Math.floor((10 - diffMinutes) * 60));
 
     const html = pageTemplate('Confirm Trial', `
       <div class="icon">🔐</div>
@@ -319,8 +285,33 @@ app.get('/verify-trial', async (req, res) => {
         <button type="submit" class="btn" id="submitBtn" style="background:#5865f2;color:white;border:none;padding:14px 32px;border-radius:12px;font-size:18px;font-weight:500;cursor:pointer;width:100%;max-width:280px;">Activate Trial</button>
       </form>
       <div id="spinner" class="spinner"></div>
-      <div class="footer-note" id="footerNote">This link expires in ${Math.max(0, 10 - Math.floor(diffMinutes))} minutes.</div>
+      <div class="footer-note" id="footerNote">This link expires in <span id="countdown">${totalSeconds}</span> seconds.</div>
+      <div id="expiredMessage" style="display:none; color:#ed4245; margin-top:16px;">
+        ⏳ This link has expired. <a href="/" style="color:#5865f2;">Go start a new trial</a>
+      </div>
       <script>
+        let secondsLeft = ${totalSeconds};
+        const countdownEl = document.getElementById('countdown');
+        const submitBtn = document.getElementById('submitBtn');
+        const note = document.getElementById('footerNote');
+        const expiredMsg = document.getElementById('expiredMessage');
+
+        function updateCountdown() {
+          if (secondsLeft <= 0) {
+            countdownEl.textContent = '0';
+            submitBtn.disabled = true;
+            submitBtn.style.opacity = '0.5';
+            submitBtn.style.cursor = 'not-allowed';
+            note.style.display = 'none';
+            expiredMsg.style.display = 'block';
+            return;
+          }
+          countdownEl.textContent = secondsLeft;
+          secondsLeft--;
+        }
+        updateCountdown();
+        setInterval(updateCountdown, 1000);
+
         document.getElementById('trialForm').addEventListener('submit', function(e) {
           const btn = document.getElementById('submitBtn');
           const spinner = document.getElementById('spinner');
@@ -329,6 +320,9 @@ app.get('/verify-trial', async (req, res) => {
           btn.textContent = 'Activating...';
           spinner.style.display = 'block';
           note.style.display = 'none';
+          // Remove any existing expired message
+          const expiredMsg = document.getElementById('expiredMessage');
+          if (expiredMsg) expiredMsg.style.display = 'none';
         });
       </script>
     `, { color: '#57f287' });
@@ -426,9 +420,8 @@ app.post('/confirm-trial', async (req, res) => {
           </div>
         </div>
         <p class="message">Go back to Discord and use <code style="background:#1e1e32;padding:2px 8px;border-radius:4px;color:#b0b0b0;">/start</code> to begin automation.</p>
-        <div class="btn-group">
-          <a href="${DISCORD_APP_MAIN}" class="btn">Open Discord App</a>
-          <a href="${DISCORD_WEB_MAIN}" class="btn btn-web" target="_blank">Open Discord Web</a>
+        <div style="margin: 16px 0;">
+          <a href="${DISCORD_APP_MAIN}" class="btn">Open Discord</a>
         </div>
         <div class="footer-note">🔒 Your IP has been recorded to prevent abuse.</div>
       </div>
@@ -453,7 +446,7 @@ app.post('/confirm-trial', async (req, res) => {
             document.getElementById('loadingSpinner').style.display = 'none';
             const content = document.getElementById('successContent');
             content.classList.remove('hidden');
-            content.style.animation = 'fadeSlide 0.6s ease forwards';
+            content.style.animation = 'fadeIn 0.6s ease forwards';
           }, 800);
         })();
       </script>
