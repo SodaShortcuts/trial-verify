@@ -7,30 +7,39 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// ========== TRUST PROXY ==========
 app.set('trust proxy', true);
+
+// ========== ROOT ROUTE FOR HEALTH CHECKS ==========
+app.get('/', (req, res) => res.send('OK'));
 
 // ========== HELPER: GET REAL IP ==========
 function getClientIP(req) {
-  // 1. Check x-forwarded-for (most reliable)
   const forwarded = req.headers['x-forwarded-for'];
   if (forwarded) {
-    // Take the first IP in the list (client's real IP)
     const ips = forwarded.split(',').map(ip => ip.trim());
     return ips[0].replace(/^::ffff:/, '');
   }
-  // 2. Fallback to req.ip (if trust proxy is working)
   return req.ip.replace(/^::ffff:/, '');
 }
-// =========================================
+
+// ========== GRACEFUL SHUTDOWN ==========
+process.on('SIGTERM', () => {
+  console.log('⚠️ SIGTERM received – shutting down gracefully...');
+  process.exit(0);
+});
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+});
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI, { maxPoolSize: 10 })
   .then(() => console.log('✅ MongoDB connected'))
-  .catch(err => console.error('❌ MongoDB connection error:', err));
+  .catch(err => {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1);
+  });
 
-// Models
+// ========== MODELS ==========
 const TrialVerificationSchema = new mongoose.Schema({
   userId: { type: String, required: true },
   token: { type: String, required: true, unique: true },
@@ -60,7 +69,7 @@ const SubscriptionSchema = new mongoose.Schema({
 });
 const Subscription = mongoose.model('Subscription', SubscriptionSchema);
 
-// Webhook log
+// ========== WEBHOOK LOG ==========
 async function sendTrialLog(userId, expiresAt, ip, userAgent) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   if (!webhookUrl) {
@@ -76,7 +85,7 @@ async function sendTrialLog(userId, expiresAt, ip, userAgent) {
   }
 }
 
-// ========== CONFIRMATION PAGE (GET) ==========
+// ========== ROUTES ==========
 app.get('/verify-trial', async (req, res) => {
   const { token } = req.query;
   if (!token) return res.status(400).send('Missing token.');
@@ -86,7 +95,9 @@ app.get('/verify-trial', async (req, res) => {
     return res.status(400).send('Invalid or expired token. Please run /trial again.');
   }
 
-  // Show the confirmation button (preview bots won't click)
+  const clientIP = getClientIP(req);
+  console.log(`[Verify] Serving confirmation page for token ${token}, IP: ${clientIP}`);
+
   res.send(`
     <html>
       <head>
@@ -108,7 +119,7 @@ app.get('/verify-trial', async (req, res) => {
           <h1>🔐 Confirm Trial Activation</h1>
           <p>Click the button below to activate your 48‑hour free trial.</p>
           <div class="info">
-            <span><strong>Your IP will be recorded:</strong> ${getClientIP(req)}</span>
+            <span><strong>Your IP will be recorded:</strong> ${clientIP}</span>
           </div>
           <form action="/confirm-trial" method="POST">
             <input type="hidden" name="token" value="${token}">
@@ -121,7 +132,6 @@ app.get('/verify-trial', async (req, res) => {
   `);
 });
 
-// ========== CONFIRMATION POST ==========
 app.post('/confirm-trial', async (req, res) => {
   const { token } = req.body;
   if (!token) return res.status(400).send('Missing token.');
@@ -136,7 +146,7 @@ app.post('/confirm-trial', async (req, res) => {
   const userAgent = req.headers['user-agent'] || 'unknown';
   const referer = req.headers['referer'] || '';
 
-  console.log(`[Verify] Real IP: ${clientIP}, UA: ${userAgent}`);
+  console.log(`[Confirm] Real IP: ${clientIP}, UA: ${userAgent}`);
 
   // Check if IP was used by another user
   const existing = await UsedIP.findOne({
@@ -159,15 +169,12 @@ app.post('/confirm-trial', async (req, res) => {
     lastExpiredNotified: false
   });
 
-  // Store IP with UA
   await UsedIP.create({ userId, ip: clientIP, userAgent, referer });
   verification.verified = true;
   await verification.save();
 
-  // Send Discord log
   await sendTrialLog(userId, expiresAt, clientIP, userAgent);
 
-  // Success page
   res.send(`
     <html>
       <head>
