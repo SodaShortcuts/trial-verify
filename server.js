@@ -2,12 +2,101 @@ const express = require('express');
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 const axios = require('axios');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const app = express();
+
+// ========== SECURITY MIDDLEWARE ==========
+app.use(helmet());
+app.set('trust proxy', true);
+
+// Rate limiting – general
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: 'Too many requests, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(limiter);
+
+// Stricter limit for trial confirmation
+const strictLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: 'Too many trial attempts. Please wait an hour.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/confirm-trial', strictLimiter);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.set('trust proxy', true);
+
+// ========== HELPER: STYLED ERROR PAGE ==========
+function errorPage(title, message, details = '') {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${title}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+          font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+          background: linear-gradient(145deg, #0f0f1a 0%, #1a1a2e 100%);
+          min-height: 100vh;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          padding: 20px;
+        }
+        .card {
+          background: rgba(255,255,255,0.04);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(255,255,255,0.06);
+          border-radius: 24px;
+          padding: 48px 40px;
+          max-width: 520px;
+          width: 100%;
+          box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+          text-align: center;
+        }
+        .icon { font-size: 48px; margin-bottom: 16px; }
+        h1 { font-size: 28px; font-weight: 600; color: #ed4245; margin-bottom: 8px; }
+        .subtitle { color: #b0b0b0; font-size: 16px; margin-bottom: 24px; }
+        .message { color: #e0e0e0; font-size: 16px; line-height: 1.6; margin-bottom: 24px; }
+        .btn {
+          display: inline-block;
+          background: #5865f2;
+          color: white;
+          text-decoration: none;
+          padding: 12px 28px;
+          border-radius: 12px;
+          font-weight: 500;
+          transition: 0.2s;
+        }
+        .btn:hover { background: #4752c4; transform: translateY(-2px); box-shadow: 0 8px 25px rgba(88,101,242,0.3); }
+        .footer-note { margin-top: 24px; color: #72767d; font-size: 13px; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <div class="icon">${title.includes('Expired') ? '⏳' : title.includes('Invalid') ? '❌' : '⚠️'}</div>
+        <h1>${title}</h1>
+        <p class="message">${message}</p>
+        ${details ? `<p class="message" style="font-size:14px;color:#9e9e9e;">${details}</p>` : ''}
+        <a href="/" class="btn">Go Home</a>
+        <div class="footer-note">If you believe this is an error, contact support.</div>
+      </div>
+    </body>
+    </html>
+  `;
+}
 
 // ========== ROOT ROUTE ==========
 app.get('/', (req, res) => res.send('OK'));
@@ -103,13 +192,19 @@ async function sendTrialLog(userId) {
 // ========== ROUTES ==========
 app.get('/verify-trial', async (req, res) => {
   const { token } = req.query;
-  if (!token) return res.status(400).send('Missing token.');
+  if (!token) {
+    return res.status(400).send(errorPage('Missing Token', 'No verification token was provided.', 'Please run /trial again to get a fresh link.'));
+  }
 
   console.log('[verify-trial] Looking up token...', token);
   try {
     const verification = await TrialVerification.findOne({ token, verified: false }).maxTimeMS(5000);
     if (!verification) {
-      return res.status(400).send('Invalid or expired token. Please run /trial again.');
+      const exists = await TrialVerification.findOne({ token }).maxTimeMS(5000);
+      if (exists && exists.verified) {
+        return res.status(400).send(errorPage('Token Already Used', 'This trial link has already been used.', 'Each link can only be used once.'));
+      }
+      return res.status(400).send(errorPage('Invalid or Expired Link', 'The trial link is invalid or has expired.', 'Please run /trial again to get a new link.'));
     }
     const clientIP = getClientIP(req);
 
@@ -142,59 +237,14 @@ app.get('/verify-trial', async (req, res) => {
             box-shadow: 0 30px 60px rgba(0,0,0,0.6);
             text-align: center;
           }
-          h1 {
-            font-size: 28px;
-            font-weight: 600;
-            color: #57f287;
-            margin-bottom: 8px;
-          }
-          .subtitle {
-            color: #b0b0b0;
-            font-size: 16px;
-            margin-bottom: 24px;
-          }
-          .info-box {
-            background: rgba(255,255,255,0.04);
-            border-radius: 12px;
-            padding: 16px 20px;
-            margin: 20px 0 28px;
-            border: 1px solid rgba(255,255,255,0.06);
-          }
-          .info-box .label {
-            color: #9e9e9e;
-            font-size: 13px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-          }
-          .info-box .value {
-            color: #e0e0e0;
-            font-size: 18px;
-            font-weight: 500;
-            margin-top: 4px;
-          }
-          button {
-            background: #5865f2;
-            color: white;
-            border: none;
-            padding: 14px 32px;
-            border-radius: 12px;
-            font-size: 18px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            width: 100%;
-            max-width: 280px;
-          }
-          button:hover {
-            background: #4752c4;
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(88,101,242,0.3);
-          }
-          .footer-note {
-            margin-top: 24px;
-            color: #72767d;
-            font-size: 13px;
-          }
+          h1 { font-size: 28px; font-weight: 600; color: #57f287; margin-bottom: 8px; }
+          .subtitle { color: #b0b0b0; font-size: 16px; margin-bottom: 24px; }
+          .info-box { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 16px 20px; margin: 20px 0 28px; border: 1px solid rgba(255,255,255,0.06); }
+          .info-box .label { color: #9e9e9e; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+          .info-box .value { color: #e0e0e0; font-size: 18px; font-weight: 500; margin-top: 4px; }
+          button { background: #5865f2; color: white; border: none; padding: 14px 32px; border-radius: 12px; font-size: 18px; font-weight: 500; cursor: pointer; transition: 0.2s; width: 100%; max-width: 280px; }
+          button:hover { background: #4752c4; transform: translateY(-2px); box-shadow: 0 8px 25px rgba(88,101,242,0.3); }
+          .footer-note { margin-top: 24px; color: #72767d; font-size: 13px; }
         </style>
       </head>
       <body>
@@ -216,20 +266,26 @@ app.get('/verify-trial', async (req, res) => {
     `);
   } catch (err) {
     console.error('[verify-trial] DB error:', err);
-    return res.status(500).send('An error occurred. Please try again.');
+    return res.status(500).send(errorPage('Database Error', 'We encountered an issue while verifying your trial.', 'Please try again later or contact support.'));
   }
 });
 
 app.post('/confirm-trial', async (req, res) => {
   const { token } = req.body;
-  if (!token) return res.status(400).send('Missing token.');
+  if (!token) {
+    return res.status(400).send(errorPage('Missing Token', 'No verification token was provided.', 'Please run /trial again to get a fresh link.'));
+  }
 
   console.log('[confirm-trial] Received token:', token);
 
   try {
     const verification = await TrialVerification.findOne({ token, verified: false }).maxTimeMS(5000);
     if (!verification) {
-      return res.status(400).send('Invalid or expired token. Please run /trial again.');
+      const exists = await TrialVerification.findOne({ token }).maxTimeMS(5000);
+      if (exists && exists.verified) {
+        return res.status(400).send(errorPage('Token Already Used', 'This trial link has already been used.', 'Each link can only be used once.'));
+      }
+      return res.status(400).send(errorPage('Invalid or Expired Link', 'The trial link is invalid or has expired.', 'Please run /trial again to get a new link.'));
     }
 
     const userId = verification.userId;
@@ -242,20 +298,20 @@ app.post('/confirm-trial', async (req, res) => {
 
     console.log(`[confirm-trial] IP: ${clientIP}, UA: ${userAgent}`);
 
-    // Check IP already used
+    // Check IP already used by another user
     const existing = await UsedIP.findOne({
       ip: clientIP,
       userId: { $ne: userId },
       createdAt: { $gt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
     }).maxTimeMS(5000);
     if (existing) {
-      return res.status(403).send('This IP address has already been used for a trial. If you believe this is an error, please contact support.');
+      return res.status(403).send(errorPage('IP Already Used', 'This IP address has already been used for a trial.', 'If you believe this is an error, please contact support.'));
     }
 
     // VPN detection
     const isVpn = await isVpnOrProxy(clientIP);
     if (isVpn) {
-      return res.status(403).send('Please disable your VPN or proxy and try again.');
+      return res.status(403).send(errorPage('VPN/Proxy Detected', 'Please disable your VPN or proxy and try again.', 'For security, we do not allow trial activations through VPNs or proxies.'));
     }
 
     // Grant trial
@@ -319,56 +375,14 @@ app.post('/confirm-trial', async (req, res) => {
             box-shadow: 0 30px 60px rgba(0,0,0,0.6);
             text-align: center;
           }
-          h1 {
-            font-size: 28px;
-            font-weight: 600;
-            color: #57f287;
-            margin-bottom: 8px;
-          }
-          .subtitle {
-            color: #b0b0b0;
-            font-size: 16px;
-            margin-bottom: 24px;
-          }
-          .info-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin: 20px 0 28px;
-          }
-          .info-item {
-            background: rgba(255,255,255,0.04);
-            border-radius: 12px;
-            padding: 12px 16px;
-            border: 1px solid rgba(255,255,255,0.06);
-          }
-          .info-item .label {
-            color: #9e9e9e;
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-          }
-          .info-item .value {
-            color: #e0e0e0;
-            font-size: 16px;
-            font-weight: 500;
-            margin-top: 4px;
-          }
-          .info-item .value time {
-            color: #b0b0b0;
-            font-weight: 400;
-          }
-          .message {
-            color: #b0b0b0;
-            font-size: 15px;
-            margin: 16px 0 20px;
-            line-height: 1.6;
-          }
-          .footer-note {
-            margin-top: 24px;
-            color: #72767d;
-            font-size: 13px;
-          }
+          h1 { font-size: 28px; font-weight: 600; color: #57f287; margin-bottom: 8px; }
+          .subtitle { color: #b0b0b0; font-size: 16px; margin-bottom: 24px; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0 28px; }
+          .info-item { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 12px 16px; border: 1px solid rgba(255,255,255,0.06); }
+          .info-item .label { color: #9e9e9e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+          .info-item .value { color: #e0e0e0; font-size: 16px; font-weight: 500; margin-top: 4px; }
+          .message { color: #b0b0b0; font-size: 15px; margin: 16px 0 20px; line-height: 1.6; }
+          .footer-note { margin-top: 24px; color: #72767d; font-size: 13px; }
           @media (max-width: 480px) {
             .card { padding: 32px 20px; }
             .info-grid { grid-template-columns: 1fr; }
@@ -414,7 +428,7 @@ app.post('/confirm-trial', async (req, res) => {
     `);
   } catch (err) {
     console.error('[confirm-trial] Error:', err);
-    return res.status(500).send('An error occurred. Please try again later.');
+    return res.status(500).send(errorPage('Database Error', 'We encountered an issue while activating your trial.', 'Please try again later or contact support.'));
   }
 });
 
