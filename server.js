@@ -107,6 +107,7 @@ async function sendTrialLog(userId, expiresAt, ip, userAgent, isBot) {
 
 // ========== ROUTES ==========
 app.get('/verify-trial', async (req, res) => {
+  console.log('[verify-trial] Route hit!');
   const { token } = req.query;
   if (!token) return res.status(400).send('Missing token.');
 
