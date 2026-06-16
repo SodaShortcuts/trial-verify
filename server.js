@@ -12,6 +12,7 @@ const app = express();
 const GUILD_ID = '1292786100707786763';
 const CHANNEL_ID_MAIN = '1497016420893200535';
 const CHANNEL_ID_TRIAL = '1294237394765090847';
+const BRAND_ICON = 'https://i.ibb.co/d06qhm5x/2bcropped.png'; // your icon
 
 const DISCORD_APP_MAIN = `discord://discord.com/channels/${GUILD_ID}/${CHANNEL_ID_MAIN}`;
 const DISCORD_WEB_MAIN = `https://discord.com/channels/${GUILD_ID}/${CHANNEL_ID_MAIN}`;
@@ -48,7 +49,7 @@ app.use('/confirm-trial', strictLimiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ========== PAGE TEMPLATE WITH ADVANCED STYLING ==========
+// ========== PAGE TEMPLATE – CLEAN & MODERN ==========
 function pageTemplate(title, body, options = {}) {
   return `
     <!DOCTYPE html>
@@ -57,21 +58,21 @@ function pageTemplate(title, body, options = {}) {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>${title}</title>
+      <link rel="icon" href="${BRAND_ICON}">
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
           font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-          background: #0a0a1a;
+          background: #0c0c1a;
           min-height: 100vh;
           display: flex;
           justify-content: center;
           align-items: center;
           padding: 20px;
           margin: 0;
-          overflow: hidden;
           position: relative;
         }
-        /* Animated gradient background */
+        /* Subtle dark gradient (low brightness, professional) */
         body::before {
           content: '';
           position: fixed;
@@ -79,129 +80,175 @@ function pageTemplate(title, body, options = {}) {
           left: 0;
           right: 0;
           bottom: 0;
-          background: linear-gradient(135deg, #0f0f2a 0%, #1a1a3e 50%, #0f0f2a 100%);
-          background-size: 400% 400%;
-          animation: gradientMove 12s ease infinite;
+          background: radial-gradient(ellipse at 50% 30%, #1a1a3a 0%, #0c0c1a 70%);
           z-index: 0;
-        }
-        @keyframes gradientMove {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
         }
         .card {
           position: relative;
           z-index: 1;
           background: rgba(255,255,255,0.04);
           backdrop-filter: blur(16px);
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 28px;
-          padding: 48px 40px;
-          max-width: 520px;
+          border: 1px solid rgba(255,255,255,0.06);
+          border-radius: 24px;
+          padding: 40px 32px;
+          max-width: 480px;
           width: 100%;
           box-shadow: 0 30px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.02) inset;
           text-align: center;
-          transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-          animation: cardEntrance 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+          transition: opacity 0.4s ease, transform 0.4s ease;
+          animation: cardIn 0.6s ease forwards;
         }
         .card.exit {
           opacity: 0;
-          transform: scale(0.96) translateY(20px);
+          transform: scale(0.97) translateY(12px);
         }
-        @keyframes cardEntrance {
-          0% { opacity: 0; transform: scale(0.95) translateY(30px); }
+        @keyframes cardIn {
+          0% { opacity: 0; transform: scale(0.97) translateY(20px); }
           100% { opacity: 1; transform: scale(1) translateY(0); }
         }
-        .icon { font-size: 56px; margin-bottom: 16px; display: inline-block; animation: iconPop 0.8s ease 0.3s both; }
-        @keyframes iconPop {
-          0% { transform: scale(0.5); opacity: 0; }
-          60% { transform: scale(1.1); opacity: 1; }
-          100% { transform: scale(1); opacity: 1; }
+        .brand-icon {
+          width: 64px;
+          height: 64px;
+          border-radius: 50%;
+          object-fit: cover;
+          margin-bottom: 16px;
+          border: 2px solid rgba(255,255,255,0.08);
+          box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+          animation: iconPulse 3s ease-in-out infinite;
         }
-        h1 { font-size: 28px; font-weight: 600; color: ${options.color || '#57f287'}; margin-bottom: 8px; animation: fadeUp 0.6s ease 0.2s both; }
-        .subtitle { color: #b0b0b0; font-size: 16px; margin-bottom: 24px; animation: fadeUp 0.6s ease 0.3s both; }
-        .message { color: #e0e0e0; font-size: 16px; line-height: 1.6; margin-bottom: 24px; animation: fadeUp 0.6s ease 0.4s both; }
+        @keyframes iconPulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.03); }
+        }
+        h1 {
+          font-size: 26px;
+          font-weight: 600;
+          color: ${options.color || '#57f287'};
+          margin-bottom: 8px;
+          letter-spacing: -0.3px;
+        }
+        .subtitle {
+          color: #b0b0b0;
+          font-size: 15px;
+          margin-bottom: 24px;
+        }
+        .message {
+          color: #d0d0d0;
+          font-size: 15px;
+          line-height: 1.6;
+          margin-bottom: 24px;
+        }
         .btn {
           display: inline-block;
           background: #5865f2;
           color: white;
           text-decoration: none;
-          padding: 14px 32px;
-          border-radius: 14px;
+          padding: 12px 28px;
+          border-radius: 12px;
           font-weight: 600;
           font-size: 16px;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          transition: all 0.25s ease;
           border: none;
           cursor: pointer;
           text-align: center;
           width: 100%;
           max-width: 280px;
+          box-shadow: 0 4px 12px rgba(88,101,242,0.25);
           position: relative;
-          overflow: hidden;
-          box-shadow: 0 4px 15px rgba(88,101,242,0.3);
-          animation: fadeUp 0.6s ease 0.5s both;
         }
-        .btn::after {
-          content: '';
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          width: 0;
-          height: 0;
-          border-radius: 50%;
-          background: rgba(255,255,255,0.2);
-          transition: width 0.6s, height 0.6s, top 0.6s, left 0.6s;
+        .btn:hover {
+          background: #4752c4;
+          transform: translateY(-2px);
+          box-shadow: 0 8px 25px rgba(88,101,242,0.4);
         }
-        .btn:active::after {
-          width: 300px;
-          height: 300px;
-          top: -100px;
-          left: -100px;
+        .btn:active {
+          transform: scale(0.98) translateY(0);
+          box-shadow: none;
         }
-        .btn:hover { background: #4752c4; transform: translateY(-3px); box-shadow: 0 8px 25px rgba(88,101,242,0.5); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
-        .btn-web { background: #40444b; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
-        .btn-web:hover { background: #4f545c; }
-        .footer-note { margin-top: 24px; color: #72767d; font-size: 13px; animation: fadeUp 0.6s ease 0.6s both; }
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0 28px; }
-        .info-item { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 12px 16px; border: 1px solid rgba(255,255,255,0.06); transition: background 0.3s; }
-        .info-item:hover { background: rgba(255,255,255,0.07); }
-        .info-item .label { color: #9e9e9e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .info-item .value { color: #e0e0e0; font-size: 16px; font-weight: 500; margin-top: 4px; }
-        .spinner { display: none; margin: 20px auto; width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #57f287; border-radius: 50%; animation: spin 0.8s linear infinite; }
-        .spinner.visible { display: block; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .hidden { display: none; }
-        .btn-group { display: flex; flex-direction: column; gap: 12px; align-items: center; margin: 16px 0; }
-        .btn-single { margin: 16px auto; }
-        .btn-loading { position: relative; pointer-events: none; color: transparent !important; }
-        .btn-loading::before {
-          content: '';
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          width: 24px;
-          height: 24px;
-          margin: -12px 0 0 -12px;
-          border: 3px solid rgba(255,255,255,0.3);
-          border-top-color: #fff;
+        .btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          transform: none !important;
+          box-shadow: none;
+        }
+        .btn-web {
+          background: #40444b;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .btn-web:hover {
+          background: #4f545c;
+        }
+        .btn-group {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          align-items: center;
+          margin: 16px 0;
+        }
+        .btn-single {
+          margin: 16px auto;
+        }
+        .btn .spinner {
+          display: none;
+          width: 18px;
+          height: 18px;
+          border: 2px solid rgba(255,255,255,0.3);
+          border-top: 2px solid #fff;
           border-radius: 50%;
           animation: spin 0.8s linear infinite;
+          margin-right: 8px;
+          vertical-align: middle;
         }
-        @keyframes fadeUp {
-          0% { opacity: 0; transform: translateY(15px); }
-          100% { opacity: 1; transform: translateY(0); }
+        .btn.loading .spinner {
+          display: inline-block;
         }
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-6px); }
+        .btn.loading .btn-text {
+          display: none;
         }
-        .card:hover { border-color: rgba(255,255,255,0.12); }
-        @media (max-width: 480px) { .card { padding: 32px 20px; } .info-grid { grid-template-columns: 1fr; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .footer-note {
+          margin-top: 24px;
+          color: #72767d;
+          font-size: 13px;
+        }
+        .info-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          margin: 20px 0 28px;
+        }
+        .info-item {
+          background: rgba(255,255,255,0.04);
+          border-radius: 12px;
+          padding: 12px 16px;
+          border: 1px solid rgba(255,255,255,0.06);
+        }
+        .info-item .label {
+          color: #9e9e9e;
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        .info-item .value {
+          color: #e0e0e0;
+          font-size: 16px;
+          font-weight: 500;
+          margin-top: 4px;
+        }
+        .countdown-highlight {
+          color: #57f287;
+          font-weight: 600;
+        }
+        @media (max-width: 480px) {
+          .card { padding: 32px 20px; }
+          .info-grid { grid-template-columns: 1fr; }
+        }
       </style>
     </head>
     <body>
       <div class="card" id="card">
+        <img src="${BRAND_ICON}" alt="Brand" class="brand-icon">
         ${body}
       </div>
       <script>
@@ -212,15 +259,14 @@ function pageTemplate(title, body, options = {}) {
           const card = document.getElementById('card');
           card.classList.add('exit');
           if (target.tagName === 'A') {
-            setTimeout(() => { window.location.href = target.href; }, 500);
+            setTimeout(() => { window.location.href = target.href; }, 400);
           } else if (target.tagName === 'BUTTON' && target.type === 'submit') {
             e.preventDefault();
-            target.classList.add('btn-loading');
+            target.classList.add('loading');
             target.disabled = true;
-            setTimeout(() => { target.closest('form').submit(); }, 600);
+            setTimeout(() => { target.closest('form').submit(); }, 500);
           }
         }, true);
-        // Remove exit class on page load to prevent initial flash
         window.addEventListener('load', function() {
           const card = document.getElementById('card');
           if (card) card.classList.remove('exit');
@@ -243,10 +289,10 @@ function errorPage(title, message, details = '', options = {}) {
     buttons = `<div class="btn-single"><a href="${DISCORD_APP_TRIAL}" class="btn">Run /trial again</a></div>`;
   }
   return pageTemplate(title, `
-    <div class="icon">${options.icon || '⚠️'}</div>
+    <div style="font-size:48px; margin-bottom:8px;">${options.icon || '⚠️'}</div>
     <h1 style="color:${options.color || '#ed4245'}">${title}</h1>
     <p class="message">${message}</p>
-    ${details ? `<p class="message" style="font-size:14px;color:#9e9e9e;">${details}</p>` : ''}
+    ${details ? `<p class="message" style="font-size:14px; color:#a0a0a0;">${details}</p>` : ''}
     ${buttons}
     <div class="footer-note">If you believe this is an error, contact support.</div>
   `, { color: options.color || '#ed4245' });
@@ -255,7 +301,6 @@ function errorPage(title, message, details = '', options = {}) {
 // ========== ROOT PAGE ==========
 app.get('/', (req, res) => {
   res.send(pageTemplate('Soda Trial Verification', `
-    <div class="icon">🔐</div>
     <h1>Soda Trial Verification</h1>
     <p class="subtitle">Secure IP verification for free trials</p>
     <p class="message">This page is used to verify your identity before activating a 48‑hour free trial.</p>
@@ -366,11 +411,20 @@ app.get('/verify-trial', async (req, res) => {
   try {
     const verification = await TrialVerification.findOne({ token }).maxTimeMS(5000);
     if (!verification) {
-      return res.status(400).send(errorPage('Invalid Verification Link', 'The link you used is invalid.', 'Please run /trial in Discord and follow the steps to get a new link.', { icon: '❌', type: 'trial' }));
+      // Token not found – could be expired or invalid. Show combined message.
+      return res.send(pageTemplate('Link Expired or Invalid', `
+        <div style="font-size:48px; margin-bottom:8px;">⏳</div>
+        <h1 style="color:#ed4245">Link Expired or Invalid</h1>
+        <p class="message">This link is no longer valid. It may have expired after 10 minutes.</p>
+        <div class="btn-single">
+          <a href="${DISCORD_APP_TRIAL}" class="btn">Run /trial again</a>
+        </div>
+        <div class="footer-note">If you believe this is an error, contact support.</div>
+      `, { color: '#ed4245' }));
     }
     if (verification.verified) {
       return res.send(pageTemplate('Link Already Used', `
-        <div class="icon">🔁</div>
+        <div style="font-size:48px; margin-bottom:8px;">🔁</div>
         <h1 style="color:#ed4245">This Link Was Already Used</h1>
         <p class="message">Each verification link can only be used once.</p>
         <div class="btn-single">
@@ -383,7 +437,16 @@ app.get('/verify-trial', async (req, res) => {
     const now = new Date();
     const diffMinutes = (now - createdAt) / (1000 * 60);
     if (diffMinutes > 10) {
-      return res.status(400).send(errorPage('Expired Verification Link', 'This link expired after 10 minutes.', 'Run /trial again in Discord to get a fresh link.', { icon: '⏳', type: 'trial' }));
+      // This should not happen because TTL would have deleted, but just in case.
+      return res.send(pageTemplate('Link Expired', `
+        <div style="font-size:48px; margin-bottom:8px;">⏳</div>
+        <h1 style="color:#ed4245">Link Expired</h1>
+        <p class="message">This link expired after 10 minutes.</p>
+        <div class="btn-single">
+          <a href="${DISCORD_APP_TRIAL}" class="btn">Run /trial again</a>
+        </div>
+        <div class="footer-note">If you believe this is an error, contact support.</div>
+      `, { color: '#ed4245' }));
     }
 
     const clientIP = getClientIP(req);
@@ -393,7 +456,6 @@ app.get('/verify-trial', async (req, res) => {
     const timeString = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 
     const html = pageTemplate('Confirm Trial', `
-      <div class="icon">🔐</div>
       <h1 style="color:#57f287">Confirm Activation</h1>
       <p class="subtitle">Click the button below to activate your 48‑hour free trial.</p>
       <div class="info-item" style="margin:20px 0;padding:12px;background:rgba(255,255,255,0.04);border-radius:12px;">
@@ -402,10 +464,13 @@ app.get('/verify-trial', async (req, res) => {
       </div>
       <form action="/confirm-trial" method="POST" id="trialForm">
         <input type="hidden" name="token" value="${token}">
-        <button type="submit" class="btn" id="submitBtn" style="background:#5865f2;color:white;border:none;padding:14px 32px;border-radius:14px;font-size:18px;font-weight:600;cursor:pointer;width:100%;max-width:280px;box-shadow:0 4px 15px rgba(88,101,242,0.3);">Activate Trial</button>
+        <button type="submit" class="btn" id="submitBtn" style="background:#5865f2;color:white;border:none;padding:12px 28px;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;width:100%;max-width:280px;box-shadow:0 4px 12px rgba(88,101,242,0.25);">
+          <span class="btn-text">Activate Trial</span>
+          <span class="spinner"></span>
+        </button>
       </form>
-      <div class="footer-note" id="footerNote">This link expires in <span id="countdown">${timeString}</span></div>
-      <div id="expiredMessage" style="display:none; margin-top:16px; color:#ed4245; font-weight:500;">
+      <div class="footer-note" id="footerNote">This link expires in <span class="countdown-highlight" id="countdown">${timeString}</span></div>
+      <div id="expiredMessage" style="display:none; margin-top:16px; color:#ed4245;">
         ⏳ This link has expired. <a href="${DISCORD_APP_TRIAL}" style="color:#5865f2;text-decoration:none;font-weight:600;">Run /trial again</a>
       </div>
       <script>
@@ -414,7 +479,6 @@ app.get('/verify-trial', async (req, res) => {
         const submitBtn = document.getElementById('submitBtn');
         const footerNote = document.getElementById('footerNote');
         const expiredMsg = document.getElementById('expiredMessage');
-        const form = document.getElementById('trialForm');
 
         function updateCountdown() {
           if (secondsLeft <= 0) {
@@ -457,11 +521,19 @@ app.post('/confirm-trial', async (req, res) => {
   try {
     const verification = await TrialVerification.findOne({ token }).maxTimeMS(5000);
     if (!verification) {
-      return res.status(400).send(errorPage('Invalid Verification Link', 'The link you used is invalid.', 'Please run /trial in Discord and follow the steps to get a new link.', { icon: '❌', type: 'trial' }));
+      return res.send(pageTemplate('Link Expired or Invalid', `
+        <div style="font-size:48px; margin-bottom:8px;">⏳</div>
+        <h1 style="color:#ed4245">Link Expired or Invalid</h1>
+        <p class="message">This link is no longer valid. It may have expired after 10 minutes.</p>
+        <div class="btn-single">
+          <a href="${DISCORD_APP_TRIAL}" class="btn">Run /trial again</a>
+        </div>
+        <div class="footer-note">If you believe this is an error, contact support.</div>
+      `, { color: '#ed4245' }));
     }
     if (verification.verified) {
       return res.send(pageTemplate('Link Already Used', `
-        <div class="icon">🔁</div>
+        <div style="font-size:48px; margin-bottom:8px;">🔁</div>
         <h1 style="color:#ed4245">This Link Was Already Used</h1>
         <p class="message">Each verification link can only be used once.</p>
         <div class="btn-single">
@@ -525,9 +597,8 @@ app.post('/confirm-trial', async (req, res) => {
 
     await sendTrialLog(userId);
 
-    // Success page with nice transition
     res.send(pageTemplate('Trial Activated', `
-      <div class="icon">✅</div>
+      <div style="font-size:48px; margin-bottom:8px;">✅</div>
       <h1 style="color:#57f287">Trial Activated</h1>
       <p class="subtitle">Your 48‑hour free trial is now active.</p>
       <div class="info-grid">
