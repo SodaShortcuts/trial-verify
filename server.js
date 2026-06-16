@@ -12,7 +12,7 @@ const app = express();
 const GUILD_ID = '1292786100707786763';
 const CHANNEL_ID_MAIN = '1497016420893200535';
 const CHANNEL_ID_TRIAL = '1294237394765090847';
-const BRAND_ICON = 'https://i.ibb.co/d06qhm5x/2bcropped.png'; // your icon
+const BRAND_ICON = 'https://i.ibb.co/d06qhm5x/2bcropped.png';
 
 const DISCORD_APP_MAIN = `discord://discord.com/channels/${GUILD_ID}/${CHANNEL_ID_MAIN}`;
 const DISCORD_WEB_MAIN = `https://discord.com/channels/${GUILD_ID}/${CHANNEL_ID_MAIN}`;
@@ -49,7 +49,7 @@ app.use('/confirm-trial', strictLimiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ========== PAGE TEMPLATE – CLEAN & MODERN ==========
+// ========== PAGE TEMPLATE ==========
 function pageTemplate(title, body, options = {}) {
   return `
     <!DOCTYPE html>
@@ -72,7 +72,6 @@ function pageTemplate(title, body, options = {}) {
           margin: 0;
           position: relative;
         }
-        /* Subtle dark gradient (low brightness, professional) */
         body::before {
           content: '';
           position: fixed;
@@ -120,24 +119,9 @@ function pageTemplate(title, body, options = {}) {
           0%, 100% { transform: scale(1); }
           50% { transform: scale(1.03); }
         }
-        h1 {
-          font-size: 26px;
-          font-weight: 600;
-          color: ${options.color || '#57f287'};
-          margin-bottom: 8px;
-          letter-spacing: -0.3px;
-        }
-        .subtitle {
-          color: #b0b0b0;
-          font-size: 15px;
-          margin-bottom: 24px;
-        }
-        .message {
-          color: #d0d0d0;
-          font-size: 15px;
-          line-height: 1.6;
-          margin-bottom: 24px;
-        }
+        h1 { font-size: 26px; font-weight: 600; color: ${options.color || '#57f287'}; margin-bottom: 8px; }
+        .subtitle { color: #b0b0b0; font-size: 15px; margin-bottom: 24px; }
+        .message { color: #d0d0d0; font-size: 15px; line-height: 1.6; margin-bottom: 24px; }
         .btn {
           display: inline-block;
           background: #5865f2;
@@ -156,94 +140,24 @@ function pageTemplate(title, body, options = {}) {
           box-shadow: 0 4px 12px rgba(88,101,242,0.25);
           position: relative;
         }
-        .btn:hover {
-          background: #4752c4;
-          transform: translateY(-2px);
-          box-shadow: 0 8px 25px rgba(88,101,242,0.4);
-        }
-        .btn:active {
-          transform: scale(0.98) translateY(0);
-          box-shadow: none;
-        }
-        .btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-          transform: none !important;
-          box-shadow: none;
-        }
-        .btn-web {
-          background: #40444b;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        }
-        .btn-web:hover {
-          background: #4f545c;
-        }
-        .btn-group {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          align-items: center;
-          margin: 16px 0;
-        }
-        .btn-single {
-          margin: 16px auto;
-        }
-        .btn .spinner {
-          display: none;
-          width: 18px;
-          height: 18px;
-          border: 2px solid rgba(255,255,255,0.3);
-          border-top: 2px solid #fff;
-          border-radius: 50%;
-          animation: spin 0.8s linear infinite;
-          margin-right: 8px;
-          vertical-align: middle;
-        }
-        .btn.loading .spinner {
-          display: inline-block;
-        }
-        .btn.loading .btn-text {
-          display: none;
-        }
+        .btn:hover { background: #4752c4; transform: translateY(-2px); box-shadow: 0 8px 25px rgba(88,101,242,0.4); }
+        .btn:active { transform: scale(0.98) translateY(0); box-shadow: none; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none; }
+        .btn-web { background: #40444b; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .btn-web:hover { background: #4f545c; }
+        .btn-group { display: flex; flex-direction: column; gap: 12px; align-items: center; margin: 16px 0; }
+        .btn-single { margin: 16px auto; }
+        .btn .spinner { display: none; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top: 2px solid #fff; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+        .btn.loading .spinner { display: inline-block; }
+        .btn.loading .btn-text { display: none; }
         @keyframes spin { to { transform: rotate(360deg); } }
-
-        .footer-note {
-          margin-top: 24px;
-          color: #72767d;
-          font-size: 13px;
-        }
-        .info-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
-          margin: 20px 0 28px;
-        }
-        .info-item {
-          background: rgba(255,255,255,0.04);
-          border-radius: 12px;
-          padding: 12px 16px;
-          border: 1px solid rgba(255,255,255,0.06);
-        }
-        .info-item .label {
-          color: #9e9e9e;
-          font-size: 12px;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-        .info-item .value {
-          color: #e0e0e0;
-          font-size: 16px;
-          font-weight: 500;
-          margin-top: 4px;
-        }
-        .countdown-highlight {
-          color: #57f287;
-          font-weight: 600;
-        }
-        @media (max-width: 480px) {
-          .card { padding: 32px 20px; }
-          .info-grid { grid-template-columns: 1fr; }
-        }
+        .footer-note { margin-top: 24px; color: #72767d; font-size: 13px; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0 28px; }
+        .info-item { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 12px 16px; border: 1px solid rgba(255,255,255,0.06); }
+        .info-item .label { color: #9e9e9e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .info-item .value { color: #e0e0e0; font-size: 16px; font-weight: 500; margin-top: 4px; }
+        .countdown-highlight { color: #57f287; font-weight: 600; }
+        @media (max-width: 480px) { .card { padding: 32px 20px; } .info-grid { grid-template-columns: 1fr; } }
       </style>
     </head>
     <body>
@@ -361,6 +275,7 @@ const TrialVerification = mongoose.model('TrialVerification', TrialVerificationS
 const UsedIPSchema = new mongoose.Schema({
   userId: { type: String, required: true },
   ip: { type: String, required: true },
+  fingerprint: { type: String, index: true }, // Device fingerprint hash
   userAgent: { type: String },
   referer: { type: String },
   acceptLanguage: { type: String },
@@ -371,6 +286,7 @@ const UsedIPSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now, expires: 2592000 }
 });
 UsedIPSchema.index({ ip: 1, userId: 1 }, { unique: true });
+UsedIPSchema.index({ fingerprint: 1, userId: 1 }, { unique: true });
 const UsedIP = mongoose.model('UsedIP', UsedIPSchema);
 
 const SubscriptionSchema = new mongoose.Schema({
@@ -411,7 +327,6 @@ app.get('/verify-trial', async (req, res) => {
   try {
     const verification = await TrialVerification.findOne({ token }).maxTimeMS(5000);
     if (!verification) {
-      // Token not found – could be expired or invalid. Show combined message.
       return res.send(pageTemplate('Link Expired or Invalid', `
         <div style="font-size:48px; margin-bottom:8px;">⏳</div>
         <h1 style="color:#ed4245">Link Expired or Invalid</h1>
@@ -437,7 +352,6 @@ app.get('/verify-trial', async (req, res) => {
     const now = new Date();
     const diffMinutes = (now - createdAt) / (1000 * 60);
     if (diffMinutes > 10) {
-      // This should not happen because TTL would have deleted, but just in case.
       return res.send(pageTemplate('Link Expired', `
         <div style="font-size:48px; margin-bottom:8px;">⏳</div>
         <h1 style="color:#ed4245">Link Expired</h1>
@@ -464,6 +378,7 @@ app.get('/verify-trial', async (req, res) => {
       </div>
       <form action="/confirm-trial" method="POST" id="trialForm">
         <input type="hidden" name="token" value="${token}">
+        <input type="hidden" name="fingerprint" id="fingerprintInput" value="">
         <button type="submit" class="btn" id="submitBtn" style="background:#5865f2;color:white;border:none;padding:12px 28px;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;width:100%;max-width:280px;box-shadow:0 4px 12px rgba(88,101,242,0.25);">
           <span class="btn-text">Activate Trial</span>
           <span class="spinner"></span>
@@ -473,7 +388,15 @@ app.get('/verify-trial', async (req, res) => {
       <div id="expiredMessage" style="display:none; margin-top:16px; color:#ed4245;">
         ⏳ This link has expired. <a href="${DISCORD_APP_TRIAL}" style="color:#5865f2;text-decoration:none;font-weight:600;">Run /trial again</a>
       </div>
+      <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
       <script>
+        // Generate fingerprint on page load and set hidden input
+        FingerprintJS.load().then(fp => {
+          fp.get().then(result => {
+            document.getElementById('fingerprintInput').value = result.visitorId;
+          });
+        });
+
         let secondsLeft = ${Math.floor(totalSeconds)};
         const countdownEl = document.getElementById('countdown');
         const submitBtn = document.getElementById('submitBtn');
@@ -511,9 +434,12 @@ app.get('/verify-trial', async (req, res) => {
 });
 
 app.post('/confirm-trial', async (req, res) => {
-  const { token } = req.body;
+  const { token, fingerprint } = req.body;
   if (!token) {
     return res.status(400).send(errorPage('Missing Token', 'No verification token was provided.', 'Please run /trial again to get a fresh link.', { icon: '❌', type: 'trial' }));
+  }
+  if (!fingerprint) {
+    return res.status(400).send(errorPage('Device Fingerprint Missing', 'Please enable JavaScript and allow device fingerprinting.', 'This helps prevent abuse.', { icon: '⚠️', type: 'trial' }));
   }
 
   console.log('[confirm-trial] Received token:', token);
@@ -551,22 +477,35 @@ app.post('/confirm-trial', async (req, res) => {
     const xForwardedFor = req.headers['x-forwarded-for'] || '';
     const cfConnectingIp = req.headers['cf-connecting-ip'] || '';
 
-    console.log(`[confirm-trial] IP: ${clientIP}, UA: ${userAgent}`);
+    console.log(`[confirm-trial] IP: ${clientIP}, UA: ${userAgent}, Fingerprint: ${fingerprint}`);
 
-    const existing = await UsedIP.findOne({
+    // 1. Check IP against other users
+    const existingIP = await UsedIP.findOne({
       ip: clientIP,
       userId: { $ne: userId },
       createdAt: { $gt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
     }).maxTimeMS(5000);
-    if (existing) {
-      return res.status(403).send(errorPage('IP Already Used', 'This IP address has already been used for a trial.', 'If you believe this is an error, please contact support.', { icon: '🚫', type: 'redo', token }));
+    if (existingIP) {
+      return res.status(403).send(errorPage('IP Already Used', 'This IP address has already been used for a trial.', 'If you believe this is an error, contact support.', { icon: '🚫', type: 'redo', token }));
     }
 
+    // 2. Check Fingerprint against other users
+    const existingFingerprint = await UsedIP.findOne({
+      fingerprint,
+      userId: { $ne: userId },
+      createdAt: { $gt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+    }).maxTimeMS(5000);
+    if (existingFingerprint) {
+      return res.status(403).send(errorPage('Alt Account Detected', 'This device has already been used for a trial by another account.', 'If you believe this is an error, contact support.', { icon: '🚫', type: 'redo', token }));
+    }
+
+    // 3. VPN detection (optional)
     const isVpn = await isVpnOrProxy(clientIP);
     if (isVpn) {
       return res.status(403).send(errorPage('VPN/Proxy Detected', 'Please disable your VPN or proxy and try again.', 'For security, we do not allow trial activations through VPNs or proxies.', { icon: '🛡️', type: 'redo', token }));
     }
 
+    // Grant trial
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
     const expiresTimestamp = expiresAt.getTime();
 
@@ -583,6 +522,7 @@ app.post('/confirm-trial', async (req, res) => {
     await UsedIP.create({
       userId,
       ip: clientIP,
+      fingerprint,
       userAgent,
       referer,
       acceptLanguage,
@@ -616,7 +556,7 @@ app.post('/confirm-trial', async (req, res) => {
         <a href="${DISCORD_APP_MAIN}" class="btn">Open Discord App</a>
         <a href="${DISCORD_WEB_MAIN}" class="btn btn-web" target="_blank">Open Discord Web</a>
       </div>
-      <div class="footer-note">🔒 Your IP has been recorded to prevent abuse.</div>
+      <div class="footer-note">🔒 Your IP and device fingerprint have been recorded.</div>
       <script>
         (function() {
           const timestamp = Number('${expiresTimestamp}');
