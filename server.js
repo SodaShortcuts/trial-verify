@@ -25,7 +25,22 @@ function getClientIP(req) {
   return req.ip.replace(/^::ffff:/, '');
 }
 
-// ========== BOT DETECTION ==========
+// ========== VPN / PROXY DETECTION ==========
+async function isVpnOrProxy(ip) {
+  try {
+    const response = await axios.get(`http://ip-api.com/json/${ip}?fields=status,proxy,hosting,message`, { timeout: 5000 });
+    const data = response.data;
+    if (data.status === 'success') {
+      return data.proxy === true || data.hosting === true;
+    }
+    return false;
+  } catch (err) {
+    console.warn('[VPN check] Failed:', err.message);
+    return false;
+  }
+}
+
+// ========== BOT DETECTION (internal logging) ==========
 function isBot(userAgent) {
   if (!userAgent) return false;
   const ua = userAgent.toLowerCase();
@@ -50,6 +65,7 @@ const UsedIPSchema = new mongoose.Schema({
   referer: { type: String },
   acceptLanguage: { type: String },
   isBot: { type: Boolean, default: false },
+  isVpn: { type: Boolean, default: false },
   xForwardedFor: { type: String },
   cfConnectingIp: { type: String },
   createdAt: { type: Date, default: Date.now, expires: 2592000 }
@@ -68,16 +84,15 @@ const SubscriptionSchema = new mongoose.Schema({
 });
 const Subscription = mongoose.model('Subscription', SubscriptionSchema);
 
-// ========== WEBHOOK LOG ==========
-async function sendTrialLog(userId, expiresAt, ip, userAgent, isBot) {
+// ========== WEBHOOK LOG (CLEAN) ==========
+async function sendTrialLog(userId) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   if (!webhookUrl) {
     console.warn('⚠️ DISCORD_WEBHOOK_URL not set – skipping log.');
     return;
   }
   try {
-    const botIcon = isBot ? '🤖' : '👤';
-    const message = `${botIcon} **Trial Redeemed** – <@${userId}> (\`${userId}\`) has activated their 48‑hour trial subscription. (IP: \`${ip}\`, UA: \`${userAgent}\`)`;
+    const message = `🎟️ **Trial Redeemed** – <@${userId}> (\`${userId}\`) has activated their 48‑hour trial subscription.`;
     await axios.post(webhookUrl, { content: message });
     console.log(`✅ Trial log sent for user ${userId}`);
   } catch (err) {
@@ -92,56 +107,116 @@ app.get('/verify-trial', async (req, res) => {
 
   console.log('[verify-trial] Looking up token...', token);
   try {
-    // Add .maxTimeMS(5000) to force a timeout after 5 seconds
     const verification = await TrialVerification.findOne({ token, verified: false }).maxTimeMS(5000);
     if (!verification) {
       return res.status(400).send('Invalid or expired token. Please run /trial again.');
     }
-    // --- rest of the handler (the code after this) stays exactly the same ---
     const clientIP = getClientIP(req);
-    const userAgent = req.headers['user-agent'] || 'unknown';
-    const isBotFlag = isBot(userAgent);
-
-    console.log(`[verify-trial] IP: ${clientIP}, UA: ${userAgent}, Bot: ${isBotFlag}`);
 
     res.send(`
-      <html>
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Verify Trial</title>
-          <style>
-            body { font-family: Arial, sans-serif; background: #1e1e2f; color: #dcddde; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-            .container { background: #2f3136; padding: 40px; border-radius: 16px; text-align: center; max-width: 600px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
-            h1 { color: #57f287; }
-            .info { margin: 16px 0; padding: 10px; background: #40444b; border-radius: 8px; text-align: left; font-size: 14px; }
-            button { background: #5865f2; color: white; border: none; padding: 12px 30px; border-radius: 8px; font-size: 18px; cursor: pointer; margin-top: 10px; }
-            button:hover { background: #4752c4; }
-            .footer { margin-top: 20px; color: #72767d; font-size: 14px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>🔐 Confirm Trial Activation</h1>
-            <p>Click the button below to activate your 48‑hour free trial.</p>
-            <div class="info">
-              <strong>Details we will log:</strong><br>
-              IP: ${clientIP} ${isBotFlag ? '🤖 (Looks like a bot)' : '👤 (Looks like a human)'}<br>
-              User-Agent: ${userAgent}<br>
-              ${req.headers['referer'] ? 'Referer: '+req.headers['referer'] : ''}
-            </div>
-            <form action="/confirm-trial" method="POST">
-              <input type="hidden" name="token" value="${token}">
-              <button type="submit">✅ Activate Trial</button>
-            </form>
-            <div class="footer">Only click once – this link expires after 10 minutes.</div>
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Confirm Trial</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(145deg, #0f0f1a 0%, #1a1a2e 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+          }
+          .card {
+            background: rgba(255,255,255,0.04);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 24px;
+            padding: 48px 40px;
+            max-width: 520px;
+            width: 100%;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+            text-align: center;
+          }
+          h1 {
+            font-size: 28px;
+            font-weight: 600;
+            color: #57f287;
+            margin-bottom: 8px;
+          }
+          .subtitle {
+            color: #b0b0b0;
+            font-size: 16px;
+            margin-bottom: 24px;
+          }
+          .info-box {
+            background: rgba(255,255,255,0.04);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin: 20px 0 28px;
+            border: 1px solid rgba(255,255,255,0.06);
+          }
+          .info-box .label {
+            color: #9e9e9e;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          .info-box .value {
+            color: #e0e0e0;
+            font-size: 18px;
+            font-weight: 500;
+            margin-top: 4px;
+          }
+          button {
+            background: #5865f2;
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            width: 100%;
+            max-width: 280px;
+          }
+          button:hover {
+            background: #4752c4;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(88,101,242,0.3);
+          }
+          .footer-note {
+            margin-top: 24px;
+            color: #72767d;
+            font-size: 13px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>🔐 Confirm Activation</h1>
+          <p class="subtitle">Click the button below to activate your 48‑hour free trial.</p>
+          <div class="info-box">
+            <div class="label">Your IP will be recorded</div>
+            <div class="value">${clientIP}</div>
           </div>
-        </body>
+          <form action="/confirm-trial" method="POST">
+            <input type="hidden" name="token" value="${token}">
+            <button type="submit">Activate Trial</button>
+          </form>
+          <div class="footer-note">This link expires in 10 minutes.</div>
+        </div>
+      </body>
       </html>
     `);
   } catch (err) {
     console.error('[verify-trial] DB error:', err);
-    return res.status(500).send('Database error. Please try again later.');
+    return res.status(500).send('An error occurred. Please try again.');
   }
 });
 
@@ -164,22 +239,29 @@ app.post('/confirm-trial', async (req, res) => {
     const acceptLanguage = req.headers['accept-language'] || '';
     const xForwardedFor = req.headers['x-forwarded-for'] || '';
     const cfConnectingIp = req.headers['cf-connecting-ip'] || '';
-    const isBotFlag = isBot(userAgent);
 
-    console.log(`[confirm-trial] IP: ${clientIP}, UA: ${userAgent}, Bot: ${isBotFlag}`);
+    console.log(`[confirm-trial] IP: ${clientIP}, UA: ${userAgent}`);
 
-    // Check if IP was used by another user
+    // Check IP already used
     const existing = await UsedIP.findOne({
       ip: clientIP,
       userId: { $ne: userId },
       createdAt: { $gt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
     }).maxTimeMS(5000);
     if (existing) {
-      return res.status(403).send('This IP address has already been used for a trial.');
+      return res.status(403).send('This IP address has already been used for a trial. If you believe this is an error, please contact support.');
+    }
+
+    // VPN detection
+    const isVpn = await isVpnOrProxy(clientIP);
+    if (isVpn) {
+      return res.status(403).send('Please disable your VPN or proxy and try again.');
     }
 
     // Grant trial
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    const expiresTimestamp = expiresAt.getTime();
+
     await Subscription.create({
       userId,
       expiresAt,
@@ -189,7 +271,7 @@ app.post('/confirm-trial', async (req, res) => {
       lastExpiredNotified: false
     });
 
-    // Save full data
+    const isBotFlag = isBot(userAgent);
     await UsedIP.create({
       userId,
       ip: clientIP,
@@ -197,6 +279,7 @@ app.post('/confirm-trial', async (req, res) => {
       referer,
       acceptLanguage,
       isBot: isBotFlag,
+      isVpn,
       xForwardedFor,
       cfConnectingIp
     });
@@ -204,48 +287,138 @@ app.post('/confirm-trial', async (req, res) => {
     verification.verified = true;
     await verification.save();
 
-    await sendTrialLog(userId, expiresAt, clientIP, userAgent, isBotFlag);
+    // Send clean webhook
+    await sendTrialLog(userId);
 
     res.send(`
-      <html>
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Trial Activated</title>
-          <style>
-            body { font-family: Arial, sans-serif; background: #1e1e2f; color: #dcddde; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-            .container { background: #2f3136; padding: 40px; border-radius: 16px; text-align: center; max-width: 500px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
-            h1 { color: #57f287; }
-            .info { margin: 16px 0; padding: 10px; background: #40444b; border-radius: 8px; }
-            .info span { display: block; margin: 4px 0; }
-            .footer { margin-top: 20px; color: #72767d; font-size: 14px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>✅ Trial Activated!</h1>
-            <p>Your 48‑hour free trial is now active.</p>
-            <div class="info">
-              <span><strong>Expires:</strong> ${new Date(expiresAt).toLocaleString()}</span>
-              <span><strong>Max Configs:</strong> 3</span>
-              <span><strong>IP Logged:</strong> ${clientIP}</span>
-              <span><strong>Bot Check:</strong> ${isBotFlag ? '🤖 Bot detected' : '👤 Human'}</span>
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Trial Activated</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(145deg, #0f0f1a 0%, #1a1a2e 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+          }
+          .card {
+            background: rgba(255,255,255,0.04);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 24px;
+            padding: 48px 40px;
+            max-width: 520px;
+            width: 100%;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+            text-align: center;
+          }
+          h1 {
+            font-size: 28px;
+            font-weight: 600;
+            color: #57f287;
+            margin-bottom: 8px;
+          }
+          .subtitle {
+            color: #b0b0b0;
+            font-size: 16px;
+            margin-bottom: 24px;
+          }
+          .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin: 20px 0 28px;
+          }
+          .info-item {
+            background: rgba(255,255,255,0.04);
+            border-radius: 12px;
+            padding: 12px 16px;
+            border: 1px solid rgba(255,255,255,0.06);
+          }
+          .info-item .label {
+            color: #9e9e9e;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          .info-item .value {
+            color: #e0e0e0;
+            font-size: 16px;
+            font-weight: 500;
+            margin-top: 4px;
+          }
+          .info-item .value time {
+            color: #b0b0b0;
+            font-weight: 400;
+          }
+          .message {
+            color: #b0b0b0;
+            font-size: 15px;
+            margin: 16px 0 20px;
+            line-height: 1.6;
+          }
+          .footer-note {
+            margin-top: 24px;
+            color: #72767d;
+            font-size: 13px;
+          }
+          @media (max-width: 480px) {
+            .card { padding: 32px 20px; }
+            .info-grid { grid-template-columns: 1fr; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>✅ Trial Activated</h1>
+          <p class="subtitle">Your 48‑hour free trial is now active.</p>
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="label">Expires</div>
+              <div class="value" id="expiryDisplay">—</div>
             </div>
-            <p>Go back to Discord and use <code>/start</code> to begin automation.</p>
-            <div class="footer">🔒 Your IP and device info have been recorded.</div>
+            <div class="info-item">
+              <div class="label">Max Configs</div>
+              <div class="value">3</div>
+            </div>
           </div>
-        </body>
+          <p class="message">Go back to Discord and use <code style="background: #1e1e32; padding: 2px 8px; border-radius: 4px; color: #b0b0b0;">/start</code> to begin automation.</p>
+          <div class="footer-note">🔒 Your IP has been recorded to prevent abuse.</div>
+        </div>
+        <script>
+          (function() {
+            const timestamp = ${expiresTimestamp};
+            if (timestamp) {
+              const date = new Date(timestamp);
+              const formatter = new Intl.DateTimeFormat(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZoneName: 'short'
+              });
+              document.getElementById('expiryDisplay').textContent = formatter.format(date);
+            }
+          })();
+        </script>
+      </body>
       </html>
     `);
   } catch (err) {
     console.error('[confirm-trial] Error:', err);
-    return res.status(500).send('Database error. Please try again later.');
+    return res.status(500).send('An error occurred. Please try again later.');
   }
 });
 
-// ... (copy the rest of your routes from the previous server.js, including /confirm-trial and /health)
-
-// ========== HEALTH ==========
+// ========== HEALTH & TEST ==========
 app.get('/health', (req, res) => res.send('OK'));
 app.get('/test-db', async (req, res) => {
   try {
@@ -256,10 +429,9 @@ app.get('/test-db', async (req, res) => {
   }
 });
 
-// ========== START SERVER AFTER DB CONNECTION ==========
+// ========== START SERVER ==========
 const PORT = process.env.PORT || 3000;
 
-// Connect with extended timeout options
 mongoose.connect(process.env.MONGODB_URI, {
   maxPoolSize: 10,
   serverSelectionTimeoutMS: 30000,
