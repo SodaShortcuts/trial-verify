@@ -253,6 +253,7 @@ app.post('/confirm-trial', async (req, res) => {
 
 // ========== HEALTH ==========
 app.get('/health', (req, res) => res.send('OK'));
+app.get('/version', (req, res) => res.send('v2 - full logging'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
