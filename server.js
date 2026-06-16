@@ -9,16 +9,32 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.set('trust proxy', true);
 
-// ========== ROOT ROUTE FOR HEALTH CHECKS ==========
+// ========== ROOT ==========
 app.get('/', (req, res) => res.send('OK'));
+
+// ========== DEBUG: Show headers ==========
+app.get('/debug-headers', (req, res) => {
+  const headers = req.headers;
+  const ip = req.ip;
+  const forwarded = headers['x-forwarded-for'];
+  res.json({
+    ip,
+    forwarded,
+    headers,
+    all: req.headers
+  });
+});
 
 // ========== HELPER: GET REAL IP ==========
 function getClientIP(req) {
+  // Try x-forwarded-for first
   const forwarded = req.headers['x-forwarded-for'];
   if (forwarded) {
     const ips = forwarded.split(',').map(ip => ip.trim());
-    return ips[0].replace(/^::ffff:/, '');
+    const realIP = ips[0].replace(/^::ffff:/, '');
+    return realIP;
   }
+  // Fallback to req.ip
   return req.ip.replace(/^::ffff:/, '');
 }
 
@@ -40,50 +56,9 @@ mongoose.connect(process.env.MONGODB_URI, { maxPoolSize: 10 })
   });
 
 // ========== MODELS ==========
-const TrialVerificationSchema = new mongoose.Schema({
-  userId: { type: String, required: true },
-  token: { type: String, required: true, unique: true },
-  createdAt: { type: Date, default: Date.now, expires: 600 },
-  verified: { type: Boolean, default: false }
-});
-const TrialVerification = mongoose.model('TrialVerification', TrialVerificationSchema);
+// ... (same models as before, keep them)
 
-const UsedIPSchema = new mongoose.Schema({
-  userId: { type: String, required: true },
-  ip: { type: String, required: true },
-  userAgent: { type: String },
-  referer: { type: String },
-  createdAt: { type: Date, default: Date.now, expires: 2592000 }
-});
-UsedIPSchema.index({ ip: 1, userId: 1 }, { unique: true });
-const UsedIP = mongoose.model('UsedIP', UsedIPSchema);
-
-const SubscriptionSchema = new mongoose.Schema({
-  userId: { type: String, required: true, unique: true },
-  expiresAt: { type: Date, required: true },
-  maxConfigs: { type: Number, default: 3 },
-  createdAt: { type: Date, default: Date.now },
-  isTrial: { type: Boolean, default: true },
-  trialRedeemedAt: { type: Date },
-  lastExpiredNotified: { type: Boolean, default: false }
-});
-const Subscription = mongoose.model('Subscription', SubscriptionSchema);
-
-// ========== WEBHOOK LOG ==========
-async function sendTrialLog(userId, expiresAt, ip, userAgent) {
-  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
-  if (!webhookUrl) {
-    console.warn('⚠️ DISCORD_WEBHOOK_URL not set – skipping log.');
-    return;
-  }
-  try {
-    const message = `🎟️ **Trial Redeemed** – <@${userId}> (\`${userId}\`) has activated their 48‑hour trial subscription. (IP: \`${ip}\`, UA: \`${userAgent}\`)`;
-    await axios.post(webhookUrl, { content: message });
-    console.log(`✅ Trial log sent for user ${userId}`);
-  } catch (err) {
-    console.error('❌ Failed to send trial log:', err.message);
-  }
-}
+// Webhook log function (same)
 
 // ========== ROUTES ==========
 app.get('/verify-trial', async (req, res) => {
@@ -95,8 +70,10 @@ app.get('/verify-trial', async (req, res) => {
     return res.status(400).send('Invalid or expired token. Please run /trial again.');
   }
 
+  // Log headers for debugging
+  console.log('[verify-trial] headers:', req.headers);
   const clientIP = getClientIP(req);
-  console.log(`[Verify] Serving confirmation page for token ${token}, IP: ${clientIP}`);
+  console.log('[verify-trial] detected IP:', clientIP);
 
   res.send(`
     <html>
@@ -112,6 +89,7 @@ app.get('/verify-trial', async (req, res) => {
           button { background: #5865f2; color: white; border: none; padding: 12px 30px; border-radius: 8px; font-size: 18px; cursor: pointer; margin-top: 10px; }
           button:hover { background: #4752c4; }
           .footer { margin-top: 20px; color: #72767d; font-size: 14px; }
+          .debug { margin-top: 20px; padding: 10px; background: #202225; border-radius: 8px; font-family: monospace; font-size: 12px; color: #b9bbbe; text-align: left; }
         </style>
       </head>
       <body>
@@ -126,6 +104,12 @@ app.get('/verify-trial', async (req, res) => {
             <button type="submit">✅ Activate Trial</button>
           </form>
           <div class="footer">Only click once – this link expires after 10 minutes.</div>
+          <div class="debug">
+            <strong>Debug:</strong><br>
+            req.ip: ${req.ip}<br>
+            x-forwarded-for: ${req.headers['x-forwarded-for'] || 'not set'}<br>
+            Detected IP: ${clientIP}
+          </div>
         </div>
       </body>
     </html>
@@ -146,7 +130,7 @@ app.post('/confirm-trial', async (req, res) => {
   const userAgent = req.headers['user-agent'] || 'unknown';
   const referer = req.headers['referer'] || '';
 
-  console.log(`[Confirm] Real IP: ${clientIP}, UA: ${userAgent}`);
+  console.log(`[confirm-trial] Detected IP: ${clientIP}, UA: ${userAgent}`);
 
   // Check if IP was used by another user
   const existing = await UsedIP.findOne({
@@ -207,7 +191,7 @@ app.post('/confirm-trial', async (req, res) => {
   `);
 });
 
-// Health
+// ========== HEALTH ==========
 app.get('/health', (req, res) => res.send('OK'));
 
 const PORT = process.env.PORT || 3000;
