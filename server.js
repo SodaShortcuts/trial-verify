@@ -6,17 +6,14 @@ require('dotenv').config();
 
 const app = express();
 app.use(express.json());
-
-// ========== FIX: Trust proxy (Railway/Cloudflare) ==========
 app.set('trust proxy', true);
-// ===========================================================
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI, { maxPoolSize: 10 })
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
-// ========== MODELS ==========
+// Models
 const TrialVerificationSchema = new mongoose.Schema({
   userId: { type: String, required: true },
   token: { type: String, required: true, unique: true },
@@ -28,6 +25,8 @@ const TrialVerification = mongoose.model('TrialVerification', TrialVerificationS
 const UsedIPSchema = new mongoose.Schema({
   userId: { type: String, required: true },
   ip: { type: String, required: true },
+  userAgent: { type: String },
+  referer: { type: String },
   createdAt: { type: Date, default: Date.now, expires: 2592000 }
 });
 UsedIPSchema.index({ ip: 1, userId: 1 }, { unique: true });
@@ -44,15 +43,15 @@ const SubscriptionSchema = new mongoose.Schema({
 });
 const Subscription = mongoose.model('Subscription', SubscriptionSchema);
 
-// ========== WEBHOOK LOG ==========
-async function sendTrialLog(userId, expiresAt) {
+// Helper to send Discord webhook (plain text)
+async function sendTrialLog(userId, expiresAt, ip, userAgent) {
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
   if (!webhookUrl) {
     console.warn('⚠️ DISCORD_WEBHOOK_URL not set – skipping log.');
     return;
   }
   try {
-    const message = `🎟️ **Trial Redeemed** – <@${userId}> (\`${userId}\`) has activated their 48‑hour trial subscription.`;
+    const message = `🎟️ **Trial Redeemed** – <@${userId}> (\`${userId}\`) has activated their 48‑hour trial subscription. (IP: \`${ip}\`, UA: \`${userAgent}\`)`;
     await axios.post(webhookUrl, { content: message });
     console.log(`✅ Trial log sent for user ${userId}`);
   } catch (err) {
@@ -60,9 +59,7 @@ async function sendTrialLog(userId, expiresAt) {
   }
 }
 
-// ========== ENDPOINTS ==========
-app.get('/health', (req, res) => res.send('OK'));
-
+// ================== CONFIRMATION PAGE ==================
 app.get('/verify-trial', async (req, res) => {
   const { token } = req.query;
   if (!token) return res.status(400).send('Missing token.');
@@ -72,12 +69,57 @@ app.get('/verify-trial', async (req, res) => {
     return res.status(400).send('Invalid or expired token. Please run /trial again.');
   }
 
-  const userId = verification.userId;
+  // Show confirmation button
+  res.send(`
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Verify Trial</title>
+        <style>
+          body { font-family: Arial, sans-serif; background: #1e1e2f; color: #dcddde; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+          .container { background: #2f3136; padding: 40px; border-radius: 16px; text-align: center; max-width: 500px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+          h1 { color: #57f287; }
+          .info { margin: 16px 0; padding: 10px; background: #40444b; border-radius: 8px; }
+          button { background: #5865f2; color: white; border: none; padding: 12px 30px; border-radius: 8px; font-size: 18px; cursor: pointer; margin-top: 10px; }
+          button:hover { background: #4752c4; }
+          .footer { margin-top: 20px; color: #72767d; font-size: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>🔐 Confirm Trial Activation</h1>
+          <p>Click the button below to activate your 48‑hour free trial.</p>
+          <div class="info">
+            <span><strong>Your IP will be recorded:</strong> ${req.ip.replace(/^::ffff:/, '')}</span>
+          </div>
+          <form action="/confirm-trial" method="POST">
+            <input type="hidden" name="token" value="${token}">
+            <button type="submit">✅ Activate Trial</button>
+          </form>
+          <div class="footer">Only click once – this link expires after 10 minutes.</div>
+        </div>
+      </body>
+    </html>
+  `);
+});
 
-  // ========== GET REAL IP (trust proxy enabled) ==========
+// ================== CONFIRMATION POST ==================
+app.post('/confirm-trial', express.urlencoded({ extended: true }), async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).send('Missing token.');
+
+  const verification = await TrialVerification.findOne({ token, verified: false });
+  if (!verification) {
+    return res.status(400).send('Invalid or expired token. Please run /trial again.');
+  }
+
+  const userId = verification.userId;
   const cleanIp = req.ip.replace(/^::ffff:/, '');
-  console.log(`[Verify] IP detected: ${cleanIp}`); // debug log
-  // =====================================================
+  const userAgent = req.headers['user-agent'] || 'unknown';
+  const referer = req.headers['referer'] || '';
+
+  console.log(`[Verify] IP: ${cleanIp}, UA: ${userAgent}`);
 
   // Check if IP was used by another user
   const existing = await UsedIP.findOne({
@@ -100,14 +142,15 @@ app.get('/verify-trial', async (req, res) => {
     lastExpiredNotified: false
   });
 
-  await UsedIP.create({ userId, ip: cleanIp });
+  // Store IP with UA
+  await UsedIP.create({ userId, ip: cleanIp, userAgent, referer });
   verification.verified = true;
   await verification.save();
 
   // Send Discord log
-  await sendTrialLog(userId, expiresAt);
+  await sendTrialLog(userId, expiresAt, cleanIp, userAgent);
 
-  // Show success page with expiration details
+  // Success page
   res.send(`
     <html>
       <head>
@@ -121,7 +164,6 @@ app.get('/verify-trial', async (req, res) => {
           .info { margin: 16px 0; padding: 10px; background: #40444b; border-radius: 8px; }
           .info span { display: block; margin: 4px 0; }
           .footer { margin-top: 20px; color: #72767d; font-size: 14px; }
-          code { background: #202225; padding: 2px 6px; border-radius: 4px; }
         </style>
       </head>
       <body>
@@ -131,14 +173,19 @@ app.get('/verify-trial', async (req, res) => {
           <div class="info">
             <span><strong>Expires:</strong> ${new Date(expiresAt).toLocaleString()}</span>
             <span><strong>Max Configs:</strong> 3</span>
+            <span><strong>IP Logged:</strong> ${cleanIp}</span>
+            <span><strong>User Agent:</strong> ${userAgent}</span>
           </div>
           <p>Go back to Discord and use <code>/start</code> to begin automation.</p>
-          <div class="footer">🔒 Your IP has been recorded to prevent abuse.</div>
+          <div class="footer">🔒 Your IP and device info have been recorded to prevent abuse.</div>
         </div>
       </body>
     </html>
   `);
 });
+
+// Health
+app.get('/health', (req, res) => res.send('OK'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
