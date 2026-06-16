@@ -48,18 +48,8 @@ async function sendTrialLog(userId, expiresAt) {
     return;
   }
   try {
-    await axios.post(webhookUrl, {
-      embeds: [{
-        title: '🎟️ Trial Redeemed',
-        description: `<@${userId}> (\`${userId}\`) has activated their 48‑hour trial subscription.`,
-        fields: [
-          { name: 'Expires', value: `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`, inline: true },
-          { name: 'Max Configs', value: '3', inline: true }
-        ],
-        color: 0x00FF00,
-        timestamp: new Date().toISOString()
-      }]
-    });
+    const message = `🎟️ **Trial Redeemed** – <@${userId}> (\`${userId}\`) has activated their 48‑hour trial subscription.`;
+    await axios.post(webhookUrl, { content: message });
     console.log(`✅ Trial log sent for user ${userId}`);
   } catch (err) {
     console.error('❌ Failed to send trial log:', err.message);
