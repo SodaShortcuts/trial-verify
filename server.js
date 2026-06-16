@@ -90,6 +90,7 @@ app.get('/verify-trial', async (req, res) => {
   if (!token) return res.status(400).send('Missing token.');
 
   console.log('[verify-trial] Looking up token...');
+  console.log('[verify-trial] Token from URL:', token);
   try {
     const verification = await TrialVerification.findOne({ token, verified: false });
     if (!verification) {
