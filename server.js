@@ -40,6 +40,7 @@ const TrialVerificationSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now, expires: 600 },
   verified: { type: Boolean, default: false }
 });
+TrialVerificationSchema.index({ token: 1, verified: 1 });
 const TrialVerification = mongoose.model('TrialVerification', TrialVerificationSchema);
 
 const UsedIPSchema = new mongoose.Schema({
@@ -89,16 +90,155 @@ app.get('/verify-trial', async (req, res) => {
   const { token } = req.query;
   if (!token) return res.status(400).send('Missing token.');
 
-  console.log('[verify-trial] Looking up token...');
-  console.log('[verify-trial] Token from URL:', token);
+  console.log('[verify-trial] Looking up token...', token);
   try {
-    const verification = await TrialVerification.findOne({ token, verified: false });
+    // Add .maxTimeMS(5000) to force a timeout after 5 seconds
+    const verification = await TrialVerification.findOne({ token, verified: false }).maxTimeMS(5000);
     if (!verification) {
       return res.status(400).send('Invalid or expired token. Please run /trial again.');
     }
-    // ... rest of handler (same as before)
+    // --- rest of the handler (the code after this) stays exactly the same ---
+    const clientIP = getClientIP(req);
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    const isBotFlag = isBot(userAgent);
+
+    console.log(`[verify-trial] IP: ${clientIP}, UA: ${userAgent}, Bot: ${isBotFlag}`);
+
+    res.send(`
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Verify Trial</title>
+          <style>
+            body { font-family: Arial, sans-serif; background: #1e1e2f; color: #dcddde; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+            .container { background: #2f3136; padding: 40px; border-radius: 16px; text-align: center; max-width: 600px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+            h1 { color: #57f287; }
+            .info { margin: 16px 0; padding: 10px; background: #40444b; border-radius: 8px; text-align: left; font-size: 14px; }
+            button { background: #5865f2; color: white; border: none; padding: 12px 30px; border-radius: 8px; font-size: 18px; cursor: pointer; margin-top: 10px; }
+            button:hover { background: #4752c4; }
+            .footer { margin-top: 20px; color: #72767d; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>🔐 Confirm Trial Activation</h1>
+            <p>Click the button below to activate your 48‑hour free trial.</p>
+            <div class="info">
+              <strong>Details we will log:</strong><br>
+              IP: ${clientIP} ${isBotFlag ? '🤖 (Looks like a bot)' : '👤 (Looks like a human)'}<br>
+              User-Agent: ${userAgent}<br>
+              ${req.headers['referer'] ? 'Referer: '+req.headers['referer'] : ''}
+            </div>
+            <form action="/confirm-trial" method="POST">
+              <input type="hidden" name="token" value="${token}">
+              <button type="submit">✅ Activate Trial</button>
+            </form>
+            <div class="footer">Only click once – this link expires after 10 minutes.</div>
+          </div>
+        </body>
+      </html>
+    `);
   } catch (err) {
     console.error('[verify-trial] DB error:', err);
+    return res.status(500).send('Database error. Please try again later.');
+  }
+});
+
+app.post('/confirm-trial', async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).send('Missing token.');
+
+  console.log('[confirm-trial] Received token:', token);
+
+  try {
+    const verification = await TrialVerification.findOne({ token, verified: false }).maxTimeMS(5000);
+    if (!verification) {
+      return res.status(400).send('Invalid or expired token. Please run /trial again.');
+    }
+
+    const userId = verification.userId;
+    const clientIP = getClientIP(req);
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    const referer = req.headers['referer'] || '';
+    const acceptLanguage = req.headers['accept-language'] || '';
+    const xForwardedFor = req.headers['x-forwarded-for'] || '';
+    const cfConnectingIp = req.headers['cf-connecting-ip'] || '';
+    const isBotFlag = isBot(userAgent);
+
+    console.log(`[confirm-trial] IP: ${clientIP}, UA: ${userAgent}, Bot: ${isBotFlag}`);
+
+    // Check if IP was used by another user
+    const existing = await UsedIP.findOne({
+      ip: clientIP,
+      userId: { $ne: userId },
+      createdAt: { $gt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+    }).maxTimeMS(5000);
+    if (existing) {
+      return res.status(403).send('This IP address has already been used for a trial.');
+    }
+
+    // Grant trial
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    await Subscription.create({
+      userId,
+      expiresAt,
+      maxConfigs: 3,
+      isTrial: true,
+      trialRedeemedAt: new Date(),
+      lastExpiredNotified: false
+    });
+
+    // Save full data
+    await UsedIP.create({
+      userId,
+      ip: clientIP,
+      userAgent,
+      referer,
+      acceptLanguage,
+      isBot: isBotFlag,
+      xForwardedFor,
+      cfConnectingIp
+    });
+
+    verification.verified = true;
+    await verification.save();
+
+    await sendTrialLog(userId, expiresAt, clientIP, userAgent, isBotFlag);
+
+    res.send(`
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Trial Activated</title>
+          <style>
+            body { font-family: Arial, sans-serif; background: #1e1e2f; color: #dcddde; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+            .container { background: #2f3136; padding: 40px; border-radius: 16px; text-align: center; max-width: 500px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+            h1 { color: #57f287; }
+            .info { margin: 16px 0; padding: 10px; background: #40444b; border-radius: 8px; }
+            .info span { display: block; margin: 4px 0; }
+            .footer { margin-top: 20px; color: #72767d; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>✅ Trial Activated!</h1>
+            <p>Your 48‑hour free trial is now active.</p>
+            <div class="info">
+              <span><strong>Expires:</strong> ${new Date(expiresAt).toLocaleString()}</span>
+              <span><strong>Max Configs:</strong> 3</span>
+              <span><strong>IP Logged:</strong> ${clientIP}</span>
+              <span><strong>Bot Check:</strong> ${isBotFlag ? '🤖 Bot detected' : '👤 Human'}</span>
+            </div>
+            <p>Go back to Discord and use <code>/start</code> to begin automation.</p>
+            <div class="footer">🔒 Your IP and device info have been recorded.</div>
+          </div>
+        </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('[confirm-trial] Error:', err);
     return res.status(500).send('Database error. Please try again later.');
   }
 });
