@@ -18,15 +18,21 @@ const limiter = rateLimit({
   message: 'Too many requests, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).send(errorPage('Rate Limit Exceeded', 'Too many requests. Please wait a few minutes.', 'Slow down, you\'re making too many requests.', { icon: '⏳', color: '#ed4245' }));
+  }
 });
 app.use(limiter);
 
 const strictLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 5,
+  max: 10,
   message: 'Too many trial attempts. Please wait an hour.',
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).send(errorPage('Rate Limit Exceeded', 'Too many trial attempts. Please wait an hour before trying again.', 'This helps prevent abuse of the trial system.', { icon: '⏳', color: '#ed4245' }));
+  }
 });
 app.use('/confirm-trial', strictLimiter);
 
@@ -63,6 +69,7 @@ function pageTemplate(title, body, options = {}) {
           width: 100%;
           box-shadow: 0 30px 60px rgba(0,0,0,0.6);
           text-align: center;
+          transition: all 0.3s ease;
         }
         .icon { font-size: 48px; margin-bottom: 16px; }
         h1 { font-size: 28px; font-weight: 600; color: ${options.color || '#57f287'}; margin-bottom: 8px; }
@@ -81,27 +88,19 @@ function pageTemplate(title, body, options = {}) {
           cursor: pointer;
         }
         .btn:hover { background: #4752c4; transform: translateY(-2px); box-shadow: 0 8px 25px rgba(88,101,242,0.3); }
-        .btn-discord {
-          background: #5865f2;
-          color: white;
-          padding: 12px 28px;
-          border-radius: 12px;
-          font-weight: 500;
-          transition: 0.2s;
-          text-decoration: none;
-          display: inline-block;
-        }
-        .btn-discord:hover { background: #4752c4; transform: translateY(-2px); box-shadow: 0 8px 25px rgba(88,101,242,0.3); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
         .footer-note { margin-top: 24px; color: #72767d; font-size: 13px; }
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0 28px; }
         .info-item { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 12px 16px; border: 1px solid rgba(255,255,255,0.06); }
         .info-item .label { color: #9e9e9e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
         .info-item .value { color: #e0e0e0; font-size: 16px; font-weight: 500; margin-top: 4px; }
+        .spinner { display: none; margin: 20px auto; width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #57f287; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         @media (max-width: 480px) { .card { padding: 32px 20px; } .info-grid { grid-template-columns: 1fr; } }
       </style>
     </head>
     <body>
-      <div class="card">
+      <div class="card" id="card">
         ${body}
       </div>
     </body>
@@ -240,7 +239,6 @@ app.get('/verify-trial', async (req, res) => {
     if (verification.verified) {
       return res.status(400).send(errorPage('Token Already Used', 'This trial link has already been used.', 'Each link can only be used once.', { icon: '🔁', token }));
     }
-    // Token exists, not verified – check if expired (TTL would have deleted it, but we check anyway)
     const createdAt = new Date(verification.createdAt);
     const now = new Date();
     const diffMinutes = (now - createdAt) / (1000 * 60);
@@ -250,8 +248,7 @@ app.get('/verify-trial', async (req, res) => {
 
     const clientIP = getClientIP(req);
 
-    // Show confirmation page
-    res.send(pageTemplate('Confirm Trial', `
+    const html = pageTemplate('Confirm Trial', `
       <div class="icon">🔐</div>
       <h1 style="color:#57f287">Confirm Activation</h1>
       <p class="subtitle">Click the button below to activate your 48‑hour free trial.</p>
@@ -259,12 +256,25 @@ app.get('/verify-trial', async (req, res) => {
         <div class="label">Your IP will be recorded</div>
         <div class="value">${clientIP}</div>
       </div>
-      <form action="/confirm-trial" method="POST">
+      <form action="/confirm-trial" method="POST" id="trialForm">
         <input type="hidden" name="token" value="${token}">
-        <button type="submit" class="btn" style="background:#5865f2;color:white;border:none;padding:14px 32px;border-radius:12px;font-size:18px;font-weight:500;cursor:pointer;width:100%;max-width:280px;">Activate Trial</button>
+        <button type="submit" class="btn" id="submitBtn" style="background:#5865f2;color:white;border:none;padding:14px 32px;border-radius:12px;font-size:18px;font-weight:500;cursor:pointer;width:100%;max-width:280px;">Activate Trial</button>
       </form>
-      <div class="footer-note">This link expires in ${Math.max(0, 10 - Math.floor(diffMinutes))} minutes.</div>
-    `, { color: '#57f287' }));
+      <div id="spinner" class="spinner"></div>
+      <div class="footer-note" id="footerNote">This link expires in ${Math.max(0, 10 - Math.floor(diffMinutes))} minutes.</div>
+      <script>
+        document.getElementById('trialForm').addEventListener('submit', function(e) {
+          const btn = document.getElementById('submitBtn');
+          const spinner = document.getElementById('spinner');
+          const note = document.getElementById('footerNote');
+          btn.disabled = true;
+          btn.textContent = 'Activating...';
+          spinner.style.display = 'block';
+          note.style.display = 'none';
+        });
+      </script>
+    `, { color: '#57f287' });
+    res.send(html);
   } catch (err) {
     console.error('[verify-trial] DB error:', err);
     return res.status(500).send(errorPage('Database Error', 'We encountered an issue while verifying your trial.', 'Please try again later or contact support.', { icon: '⚠️', token }));
@@ -298,7 +308,6 @@ app.post('/confirm-trial', async (req, res) => {
 
     console.log(`[confirm-trial] IP: ${clientIP}, UA: ${userAgent}`);
 
-    // Check IP already used by another user
     const existing = await UsedIP.findOne({
       ip: clientIP,
       userId: { $ne: userId },
@@ -308,13 +317,11 @@ app.post('/confirm-trial', async (req, res) => {
       return res.status(403).send(errorPage('IP Already Used', 'This IP address has already been used for a trial.', 'If you believe this is an error, please contact support.', { icon: '🚫', token }));
     }
 
-    // VPN detection
     const isVpn = await isVpnOrProxy(clientIP);
     if (isVpn) {
       return res.status(403).send(errorPage('VPN/Proxy Detected', 'Please disable your VPN or proxy and try again.', 'For security, we do not allow trial activations through VPNs or proxies.', { icon: '🛡️', token }));
     }
 
-    // Grant trial
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
     const expiresTimestamp = expiresAt.getTime();
 
@@ -343,10 +350,8 @@ app.post('/confirm-trial', async (req, res) => {
     verification.verified = true;
     await verification.save();
 
-    // Send webhook
     await sendTrialLog(userId);
 
-    // Success page
     res.send(pageTemplate('Trial Activated', `
       <div class="icon">✅</div>
       <h1 style="color:#57f287">Trial Activated</h1>
@@ -363,21 +368,35 @@ app.post('/confirm-trial', async (req, res) => {
       </div>
       <p class="message">Go back to Discord and use <code style="background:#1e1e32;padding:2px 8px;border-radius:4px;color:#b0b0b0;">/start</code> to begin automation.</p>
       <div style="margin:16px 0;">
-        <a href="https://discord.com/channels/@me" class="btn" target="_blank">Open Discord</a>
+        <a href="#" class="btn" id="discordBtn">Open Discord</a>
       </div>
       <div class="footer-note">🔒 Your IP has been recorded to prevent abuse.</div>
       <script>
         (function() {
-          const timestamp = ${expiresTimestamp};
-          if (timestamp) {
+          const timestamp = Number('${expiresTimestamp}');
+          if (timestamp && !isNaN(timestamp)) {
             const date = new Date(timestamp);
             const formatter = new Intl.DateTimeFormat(undefined, {
-              year: 'numeric', month: 'short', day: 'numeric',
-              hour: '2-digit', minute: '2-digit', timeZoneName: 'short'
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZoneName: 'short'
             });
-            document.getElementById('expiryDisplay').textContent = formatter.format(date);
+            const el = document.getElementById('expiryDisplay');
+            if (el) el.textContent = formatter.format(date);
           }
         })();
+        document.getElementById('discordBtn').addEventListener('click', function(e) {
+          e.preventDefault();
+          const appLink = 'discord://';
+          const webLink = 'https://discord.com/channels/@me';
+          window.location.href = appLink;
+          setTimeout(function() {
+            window.location.href = webLink;
+          }, 500);
+        });
       </script>
     `, { color: '#57f287' }));
   } catch (err) {
