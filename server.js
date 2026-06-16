@@ -97,28 +97,10 @@ function pageTemplate(title, body, options = {}) {
           transition: opacity 0.4s ease, transform 0.4s ease;
           animation: cardIn 0.6s ease forwards;
         }
-        .card.exit {
-          opacity: 0;
-          transform: scale(0.97) translateY(12px);
-        }
-        @keyframes cardIn {
-          0% { opacity: 0; transform: scale(0.97) translateY(20px); }
-          100% { opacity: 1; transform: scale(1) translateY(0); }
-        }
-        .brand-icon {
-          width: 64px;
-          height: 64px;
-          border-radius: 50%;
-          object-fit: cover;
-          margin-bottom: 16px;
-          border: 2px solid rgba(255,255,255,0.08);
-          box-shadow: 0 8px 20px rgba(0,0,0,0.3);
-          animation: iconPulse 3s ease-in-out infinite;
-        }
-        @keyframes iconPulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.03); }
-        }
+        .card.exit { opacity: 0; transform: scale(0.97) translateY(12px); }
+        @keyframes cardIn { 0% { opacity: 0; transform: scale(0.97) translateY(20px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+        .brand-icon { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; margin-bottom: 16px; border: 2px solid rgba(255,255,255,0.08); box-shadow: 0 8px 20px rgba(0,0,0,0.3); animation: iconPulse 3s ease-in-out infinite; }
+        @keyframes iconPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.03); } }
         h1 { font-size: 26px; font-weight: 600; color: ${options.color || '#57f287'}; margin-bottom: 8px; }
         .subtitle { color: #b0b0b0; font-size: 15px; margin-bottom: 24px; }
         .message { color: #d0d0d0; font-size: 15px; line-height: 1.6; margin-bottom: 24px; }
@@ -166,7 +148,6 @@ function pageTemplate(title, body, options = {}) {
         ${body}
       </div>
       <script>
-        // Smooth exit before navigation
         document.addEventListener('click', function(e) {
           const target = e.target.closest('.btn, button[type="submit"]');
           if (!target) return;
@@ -191,7 +172,6 @@ function pageTemplate(title, body, options = {}) {
   `;
 }
 
-// ========== ERROR PAGE ==========
 function errorPage(title, message, details = '', options = {}) {
   const type = options.type || 'trial';
   let buttons = '';
@@ -212,7 +192,7 @@ function errorPage(title, message, details = '', options = {}) {
   `, { color: options.color || '#ed4245' });
 }
 
-// ========== ROOT PAGE ==========
+// ========== ROOT ==========
 app.get('/', (req, res) => {
   res.send(pageTemplate('Soda Trial Verification', `
     <h1>Soda Trial Verification</h1>
@@ -226,10 +206,9 @@ app.get('/', (req, res) => {
   `, { color: '#57f287' }));
 });
 
-// ========== VERSION ==========
 app.get('/version', (req, res) => res.send('v2 - full logging'));
 
-// ========== GET REAL IP ==========
+// ========== HELPERS ==========
 function getClientIP(req) {
   const forwarded = req.headers['x-forwarded-for'];
   if (forwarded) {
@@ -239,7 +218,6 @@ function getClientIP(req) {
   return req.ip.replace(/^::ffff:/, '');
 }
 
-// ========== VPN / PROXY DETECTION ==========
 async function isVpnOrProxy(ip) {
   try {
     const response = await axios.get(`http://ip-api.com/json/${ip}?fields=status,proxy,hosting,message`, { timeout: 5000 });
@@ -254,7 +232,6 @@ async function isVpnOrProxy(ip) {
   }
 }
 
-// ========== BOT DETECTION ==========
 function isBot(userAgent) {
   if (!userAgent) return false;
   const ua = userAgent.toLowerCase();
@@ -275,7 +252,7 @@ const TrialVerification = mongoose.model('TrialVerification', TrialVerificationS
 const UsedIPSchema = new mongoose.Schema({
   userId: { type: String, required: true },
   ip: { type: String, required: true },
-  fingerprint: { type: String, index: true }, // Device fingerprint hash
+  fingerprint: { type: String, index: true },
   userAgent: { type: String },
   referer: { type: String },
   acceptLanguage: { type: String },
@@ -390,19 +367,16 @@ app.get('/verify-trial', async (req, res) => {
       </div>
       <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
       <script>
-        // Generate fingerprint on page load and set hidden input
         FingerprintJS.load().then(fp => {
           fp.get().then(result => {
             document.getElementById('fingerprintInput').value = result.visitorId;
           });
         });
-
         let secondsLeft = ${Math.floor(totalSeconds)};
         const countdownEl = document.getElementById('countdown');
         const submitBtn = document.getElementById('submitBtn');
         const footerNote = document.getElementById('footerNote');
         const expiredMsg = document.getElementById('expiredMessage');
-
         function updateCountdown() {
           if (secondsLeft <= 0) {
             countdownEl.textContent = '0s';
@@ -479,33 +453,48 @@ app.post('/confirm-trial', async (req, res) => {
 
     console.log(`[confirm-trial] IP: ${clientIP}, UA: ${userAgent}, Fingerprint: ${fingerprint}`);
 
-    // 1. Check IP against other users
-    const existingIP = await UsedIP.findOne({
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    // ---------- 1. IP check against other users ----------
+    const ipUsedByOthers = await UsedIP.findOne({
       ip: clientIP,
       userId: { $ne: userId },
-      createdAt: { $gt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+      createdAt: { $gt: thirtyDaysAgo }
     }).maxTimeMS(5000);
-    if (existingIP) {
-      return res.status(403).send(errorPage('IP Already Used', 'This IP address has already been used for a trial.', 'If you believe this is an error, contact support.', { icon: '🚫', type: 'redo', token }));
+    if (ipUsedByOthers) {
+      return res.status(403).send(errorPage('IP Already Used', 'This IP address has already been used for a trial by another user.', 'If you believe this is an error, contact support.', { icon: '🚫', type: 'redo', token }));
     }
 
-    // 2. Check Fingerprint against other users
-    const existingFingerprint = await UsedIP.findOne({
+    // ---------- 2. Fingerprint check against other users ----------
+    const fpUsedByOthers = await UsedIP.findOne({
       fingerprint,
       userId: { $ne: userId },
-      createdAt: { $gt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+      createdAt: { $gt: thirtyDaysAgo }
     }).maxTimeMS(5000);
-    if (existingFingerprint) {
+    if (fpUsedByOthers) {
       return res.status(403).send(errorPage('Alt Account Detected', 'This device has already been used for a trial by another account.', 'If you believe this is an error, contact support.', { icon: '🚫', type: 'redo', token }));
     }
 
-    // 3. VPN detection (optional)
+    // ---------- 3. NEW: IP has seen multiple distinct fingerprints ----------
+    const distinctFingerprints = await UsedIP.distinct('fingerprint', {
+      ip: clientIP,
+      createdAt: { $gt: thirtyDaysAgo }
+    }).maxTimeMS(5000);
+    // If this IP has more than one distinct fingerprint, block any new attempt.
+    // This catches: same user switching browsers/devices, and multiple users on same network.
+    if (distinctFingerprints.length > 1) {
+      // But if the current user already has a record on this IP, we could allow? 
+      // The user wants strict blocking, so we block regardless.
+      return res.status(403).send(errorPage('Multiple Devices Detected', 'This IP has been used with multiple devices or browsers. To prevent abuse, each IP can only be used from one device.', 'If you believe this is an error, contact support.', { icon: '🚫', type: 'redo', token }));
+    }
+
+    // ---------- 4. VPN detection ----------
     const isVpn = await isVpnOrProxy(clientIP);
     if (isVpn) {
       return res.status(403).send(errorPage('VPN/Proxy Detected', 'Please disable your VPN or proxy and try again.', 'For security, we do not allow trial activations through VPNs or proxies.', { icon: '🛡️', type: 'redo', token }));
     }
 
-    // Grant trial
+    // ---------- Grant trial ----------
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
     const expiresTimestamp = expiresAt.getTime();
 
@@ -582,7 +571,7 @@ app.post('/confirm-trial', async (req, res) => {
   }
 });
 
-// ========== HEALTH & TEST ==========
+// ========== HEALTH ==========
 app.get('/health', (req, res) => res.send('OK'));
 app.get('/test-db', async (req, res) => {
   try {
@@ -593,9 +582,8 @@ app.get('/test-db', async (req, res) => {
   }
 });
 
-// ========== START SERVER ==========
+// ========== START ==========
 const PORT = process.env.PORT || 3000;
-
 mongoose.connect(process.env.MONGODB_URI, {
   maxPoolSize: 10,
   serverSelectionTimeoutMS: 30000,
