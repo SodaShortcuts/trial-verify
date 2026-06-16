@@ -106,6 +106,14 @@ app.get('/verify-trial', async (req, res) => {
 
 // ========== HEALTH ==========
 app.get('/health', (req, res) => res.send('OK'));
+app.get('/test-db', async (req, res) => {
+  try {
+    const count = await TrialVerification.countDocuments();
+    res.json({ connected: true, count });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ========== START SERVER AFTER DB CONNECTION ==========
 const PORT = process.env.PORT || 3000;
