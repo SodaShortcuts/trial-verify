@@ -69,8 +69,10 @@ app.get('/verify-trial', async (req, res) => {
   }
 
   const userId = verification.userId;
-  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-  const cleanIp = ip.replace(/^::ffff:/, '').split(',')[0].trim();
+  // Get real IP from x-forwarded-for (Railway/Cloudflare)
+  const forwarded = req.headers['x-forwarded-for'];
+  const ip = forwarded ? forwarded.split(',').shift().trim() : req.socket.remoteAddress;
+  const cleanIp = ip.replace(/^::ffff:/, '').trim();
 
   // Check if IP was used by another user
   const existing = await UsedIP.findOne({
