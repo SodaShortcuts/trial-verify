@@ -10,14 +10,14 @@ const app = express();
 
 // ========== CONFIGURATION ==========
 const GUILD_ID = '1292786100707786763';
-const CHANNEL_ID_MAIN = '1497016420893200535';   // for "Open Discord" buttons
-const CHANNEL_ID_TRIAL = '1294237394765090847';  // for "Run /trial again"
+const CHANNEL_ID_MAIN = '1497016420893200535';
+const CHANNEL_ID_TRIAL = '1294237394765090847';
 
 const DISCORD_APP_MAIN = `discord://discord.com/channels/${GUILD_ID}/${CHANNEL_ID_MAIN}`;
 const DISCORD_WEB_MAIN = `https://discord.com/channels/${GUILD_ID}/${CHANNEL_ID_MAIN}`;
 const DISCORD_APP_TRIAL = `discord://discord.com/channels/${GUILD_ID}/${CHANNEL_ID_TRIAL}`;
 
-// ========== SECURITY MIDDLEWARE ==========
+// ========== SECURITY ==========
 app.use(helmet({ contentSecurityPolicy: false }));
 app.set('trust proxy', 1);
 
@@ -48,7 +48,7 @@ app.use('/confirm-trial', strictLimiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ========== HELPER: STYLED PAGE ==========
+// ========== PAGE TEMPLATE WITH ADVANCED STYLING ==========
 function pageTemplate(title, body, options = {}) {
   return `
     <!DOCTYPE html>
@@ -61,68 +61,142 @@ function pageTemplate(title, body, options = {}) {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
           font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-          background: linear-gradient(145deg, #0f0f1a 0%, #1a1a2e 100%);
+          background: #0a0a1a;
           min-height: 100vh;
           display: flex;
           justify-content: center;
           align-items: center;
           padding: 20px;
           margin: 0;
+          overflow: hidden;
+          position: relative;
+        }
+        /* Animated gradient background */
+        body::before {
+          content: '';
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: linear-gradient(135deg, #0f0f2a 0%, #1a1a3e 50%, #0f0f2a 100%);
+          background-size: 400% 400%;
+          animation: gradientMove 12s ease infinite;
+          z-index: 0;
+        }
+        @keyframes gradientMove {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
         }
         .card {
+          position: relative;
+          z-index: 1;
           background: rgba(255,255,255,0.04);
-          backdrop-filter: blur(12px);
+          backdrop-filter: blur(16px);
           border: 1px solid rgba(255,255,255,0.08);
           border-radius: 28px;
           padding: 48px 40px;
           max-width: 520px;
           width: 100%;
-          box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+          box-shadow: 0 30px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.02) inset;
           text-align: center;
-          transition: opacity 0.4s ease, transform 0.4s ease;
-          animation: fadeSlide 0.6s ease forwards;
+          transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+          animation: cardEntrance 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
         }
-        .card.fade-out {
+        .card.exit {
           opacity: 0;
-          transform: scale(0.97) translateY(10px);
+          transform: scale(0.96) translateY(20px);
         }
-        @keyframes fadeSlide {
-          0% { opacity: 0; transform: scale(0.95) translateY(20px); }
+        @keyframes cardEntrance {
+          0% { opacity: 0; transform: scale(0.95) translateY(30px); }
           100% { opacity: 1; transform: scale(1) translateY(0); }
         }
-        .icon { font-size: 52px; margin-bottom: 16px; }
-        h1 { font-size: 28px; font-weight: 600; color: ${options.color || '#57f287'}; margin-bottom: 8px; }
-        .subtitle { color: #b0b0b0; font-size: 16px; margin-bottom: 24px; }
-        .message { color: #e0e0e0; font-size: 16px; line-height: 1.6; margin-bottom: 24px; }
+        .icon { font-size: 56px; margin-bottom: 16px; display: inline-block; animation: iconPop 0.8s ease 0.3s both; }
+        @keyframes iconPop {
+          0% { transform: scale(0.5); opacity: 0; }
+          60% { transform: scale(1.1); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        h1 { font-size: 28px; font-weight: 600; color: ${options.color || '#57f287'}; margin-bottom: 8px; animation: fadeUp 0.6s ease 0.2s both; }
+        .subtitle { color: #b0b0b0; font-size: 16px; margin-bottom: 24px; animation: fadeUp 0.6s ease 0.3s both; }
+        .message { color: #e0e0e0; font-size: 16px; line-height: 1.6; margin-bottom: 24px; animation: fadeUp 0.6s ease 0.4s both; }
         .btn {
           display: inline-block;
           background: #5865f2;
           color: white;
           text-decoration: none;
-          padding: 12px 28px;
-          border-radius: 12px;
-          font-weight: 500;
-          transition: 0.2s;
+          padding: 14px 32px;
+          border-radius: 14px;
+          font-weight: 600;
+          font-size: 16px;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           border: none;
           cursor: pointer;
           text-align: center;
           width: 100%;
           max-width: 280px;
+          position: relative;
+          overflow: hidden;
+          box-shadow: 0 4px 15px rgba(88,101,242,0.3);
+          animation: fadeUp 0.6s ease 0.5s both;
         }
-        .btn:hover { background: #4752c4; transform: translateY(-2px); box-shadow: 0 8px 25px rgba(88,101,242,0.3); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-        .btn-web { background: #40444b; }
+        .btn::after {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 0;
+          height: 0;
+          border-radius: 50%;
+          background: rgba(255,255,255,0.2);
+          transition: width 0.6s, height 0.6s, top 0.6s, left 0.6s;
+        }
+        .btn:active::after {
+          width: 300px;
+          height: 300px;
+          top: -100px;
+          left: -100px;
+        }
+        .btn:hover { background: #4752c4; transform: translateY(-3px); box-shadow: 0 8px 25px rgba(88,101,242,0.5); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-web { background: #40444b; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
         .btn-web:hover { background: #4f545c; }
-        .footer-note { margin-top: 24px; color: #72767d; font-size: 13px; }
+        .footer-note { margin-top: 24px; color: #72767d; font-size: 13px; animation: fadeUp 0.6s ease 0.6s both; }
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0 28px; }
-        .info-item { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 12px 16px; border: 1px solid rgba(255,255,255,0.06); }
+        .info-item { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 12px 16px; border: 1px solid rgba(255,255,255,0.06); transition: background 0.3s; }
+        .info-item:hover { background: rgba(255,255,255,0.07); }
         .info-item .label { color: #9e9e9e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
         .info-item .value { color: #e0e0e0; font-size: 16px; font-weight: 500; margin-top: 4px; }
         .spinner { display: none; margin: 20px auto; width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #57f287; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        .spinner.visible { display: block; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .hidden { display: none; }
-        .btn-group { display: flex; flex-direction: column; gap: 10px; align-items: center; margin: 16px 0; }
+        .btn-group { display: flex; flex-direction: column; gap: 12px; align-items: center; margin: 16px 0; }
         .btn-single { margin: 16px auto; }
+        .btn-loading { position: relative; pointer-events: none; color: transparent !important; }
+        .btn-loading::before {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 24px;
+          height: 24px;
+          margin: -12px 0 0 -12px;
+          border: 3px solid rgba(255,255,255,0.3);
+          border-top-color: #fff;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+        @keyframes fadeUp {
+          0% { opacity: 0; transform: translateY(15px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-6px); }
+        }
+        .card:hover { border-color: rgba(255,255,255,0.12); }
         @media (max-width: 480px) { .card { padding: 32px 20px; } .info-grid { grid-template-columns: 1fr; } }
       </style>
     </head>
@@ -131,21 +205,25 @@ function pageTemplate(title, body, options = {}) {
         ${body}
       </div>
       <script>
-        // Fade out card before navigation
-        document.querySelectorAll('.btn, button[type="submit"]').forEach(el => {
-          el.addEventListener('click', function(e) {
-            if (this.tagName === 'BUTTON' && this.type === 'submit') {
-              e.preventDefault();
-              const card = document.getElementById('card');
-              card.classList.add('fade-out');
-              setTimeout(() => {
-                this.closest('form').submit();
-              }, 400);
-            } else if (this.tagName === 'A') {
-              const card = document.getElementById('card');
-              card.classList.add('fade-out');
-            }
-          });
+        // Smooth exit before navigation
+        document.addEventListener('click', function(e) {
+          const target = e.target.closest('.btn, button[type="submit"]');
+          if (!target) return;
+          const card = document.getElementById('card');
+          card.classList.add('exit');
+          if (target.tagName === 'A') {
+            setTimeout(() => { window.location.href = target.href; }, 500);
+          } else if (target.tagName === 'BUTTON' && target.type === 'submit') {
+            e.preventDefault();
+            target.classList.add('btn-loading');
+            target.disabled = true;
+            setTimeout(() => { target.closest('form').submit(); }, 600);
+          }
+        }, true);
+        // Remove exit class on page load to prevent initial flash
+        window.addEventListener('load', function() {
+          const card = document.getElementById('card');
+          if (card) card.classList.remove('exit');
         });
       </script>
     </body>
@@ -153,19 +231,16 @@ function pageTemplate(title, body, options = {}) {
   `;
 }
 
+// ========== ERROR PAGE ==========
 function errorPage(title, message, details = '', options = {}) {
-  const type = options.type || 'trial'; // 'trial' or 'redo'
+  const type = options.type || 'trial';
   let buttons = '';
   if (type === 'redo') {
     const token = options.token || '';
     const redoLink = token ? `/verify-trial?token=${token}` : '/';
     buttons = `<a href="${redoLink}" class="btn">Redo Verification</a>`;
   } else {
-    buttons = `
-      <div class="btn-single">
-        <a href="${DISCORD_APP_TRIAL}" class="btn">Run /trial again</a>
-      </div>
-    `;
+    buttons = `<div class="btn-single"><a href="${DISCORD_APP_TRIAL}" class="btn">Run /trial again</a></div>`;
   }
   return pageTemplate(title, `
     <div class="icon">${options.icon || '⚠️'}</div>
@@ -294,7 +369,6 @@ app.get('/verify-trial', async (req, res) => {
       return res.status(400).send(errorPage('Invalid Verification Link', 'The link you used is invalid.', 'Please run /trial in Discord and follow the steps to get a new link.', { icon: '❌', type: 'trial' }));
     }
     if (verification.verified) {
-      // Already used – show a message and a button to run /trial again
       return res.send(pageTemplate('Link Already Used', `
         <div class="icon">🔁</div>
         <h1 style="color:#ed4245">This Link Was Already Used</h1>
@@ -308,7 +382,6 @@ app.get('/verify-trial', async (req, res) => {
     const createdAt = new Date(verification.createdAt);
     const now = new Date();
     const diffMinutes = (now - createdAt) / (1000 * 60);
-    // If expired (should not happen because TTL deletes, but just in case)
     if (diffMinutes > 10) {
       return res.status(400).send(errorPage('Expired Verification Link', 'This link expired after 10 minutes.', 'Run /trial again in Discord to get a fresh link.', { icon: '⏳', type: 'trial' }));
     }
@@ -329,12 +402,11 @@ app.get('/verify-trial', async (req, res) => {
       </div>
       <form action="/confirm-trial" method="POST" id="trialForm">
         <input type="hidden" name="token" value="${token}">
-        <button type="submit" class="btn" id="submitBtn" style="background:#5865f2;color:white;border:none;padding:14px 32px;border-radius:12px;font-size:18px;font-weight:500;cursor:pointer;width:100%;max-width:280px;">Activate Trial</button>
+        <button type="submit" class="btn" id="submitBtn" style="background:#5865f2;color:white;border:none;padding:14px 32px;border-radius:14px;font-size:18px;font-weight:600;cursor:pointer;width:100%;max-width:280px;box-shadow:0 4px 15px rgba(88,101,242,0.3);">Activate Trial</button>
       </form>
-      <div id="spinner" class="spinner"></div>
       <div class="footer-note" id="footerNote">This link expires in <span id="countdown">${timeString}</span></div>
-      <div id="expiredMessage" style="display:none; margin-top:16px; color:#ed4245;">
-        ⏳ This link has expired. <a href="${DISCORD_APP_TRIAL}" style="color:#5865f2;">Run /trial again</a>
+      <div id="expiredMessage" style="display:none; margin-top:16px; color:#ed4245; font-weight:500;">
+        ⏳ This link has expired. <a href="${DISCORD_APP_TRIAL}" style="color:#5865f2;text-decoration:none;font-weight:600;">Run /trial again</a>
       </div>
       <script>
         let secondsLeft = ${Math.floor(totalSeconds)};
@@ -453,29 +525,27 @@ app.post('/confirm-trial', async (req, res) => {
 
     await sendTrialLog(userId);
 
+    // Success page with nice transition
     res.send(pageTemplate('Trial Activated', `
-      <div id="successContent" class="hidden">
-        <div class="icon">✅</div>
-        <h1 style="color:#57f287">Trial Activated</h1>
-        <p class="subtitle">Your 48‑hour free trial is now active.</p>
-        <div class="info-grid">
-          <div class="info-item">
-            <div class="label">Expires</div>
-            <div class="value" id="expiryDisplay">—</div>
-          </div>
-          <div class="info-item">
-            <div class="label">Max Configs</div>
-            <div class="value">3</div>
-          </div>
+      <div class="icon">✅</div>
+      <h1 style="color:#57f287">Trial Activated</h1>
+      <p class="subtitle">Your 48‑hour free trial is now active.</p>
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="label">Expires</div>
+          <div class="value" id="expiryDisplay">—</div>
         </div>
-        <p class="message">Go back to Discord and use <code style="background:#1e1e32;padding:2px 8px;border-radius:4px;color:#b0b0b0;">/start</code> to begin automation.</p>
-        <div class="btn-group">
-          <a href="${DISCORD_APP_MAIN}" class="btn">Open Discord App</a>
-          <a href="${DISCORD_WEB_MAIN}" class="btn btn-web" target="_blank">Open Discord Web</a>
+        <div class="info-item">
+          <div class="label">Max Configs</div>
+          <div class="value">3</div>
         </div>
-        <div class="footer-note">🔒 Your IP has been recorded to prevent abuse.</div>
       </div>
-      <div id="loadingSpinner" class="spinner" style="display:block;"></div>
+      <p class="message">Go back to Discord and use <code style="background:#1e1e32;padding:2px 8px;border-radius:4px;color:#b0b0b0;">/start</code> to begin automation.</p>
+      <div class="btn-group">
+        <a href="${DISCORD_APP_MAIN}" class="btn">Open Discord App</a>
+        <a href="${DISCORD_WEB_MAIN}" class="btn btn-web" target="_blank">Open Discord Web</a>
+      </div>
+      <div class="footer-note">🔒 Your IP has been recorded to prevent abuse.</div>
       <script>
         (function() {
           const timestamp = Number('${expiresTimestamp}');
@@ -492,12 +562,6 @@ app.post('/confirm-trial', async (req, res) => {
             const el = document.getElementById('expiryDisplay');
             if (el) el.textContent = formatter.format(date);
           }
-          setTimeout(function() {
-            document.getElementById('loadingSpinner').style.display = 'none';
-            const content = document.getElementById('successContent');
-            content.classList.remove('hidden');
-            content.style.animation = 'fadeSlide 0.6s ease forwards';
-          }, 600);
         })();
       </script>
     `, { color: '#57f287' }));
